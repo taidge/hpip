@@ -40,7 +40,7 @@ pub fn response_encoding(accept: &str) -> Option<EncodingType> {
                 EncodingType::Deflate => 1.0,
             };
             let score = quality * 10.0 + priority;
-            if best.as_ref().map_or(true, |b| {
+            if best.as_ref().is_none_or(|b| {
                 score
                     > b.1 * 10.0
                         + match b.0 {

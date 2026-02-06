@@ -1,7 +1,7 @@
 use salvo::prelude::*;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write as IoWrite};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
@@ -27,12 +27,11 @@ pub async fn handle_get(req: &mut Request, depot: &mut Depot, res: &mut Response
     }
 
     // Check for archive request via Accept header
-    if config.archives {
-        if let Some(archive_type) = crate::handler::archive::try_get_accept_archive(req) {
+    if config.archives
+        && let Some(archive_type) = crate::handler::archive::try_get_accept_archive(req) {
             crate::handler::archive::serve_archive_from_get(req, res, &config, archive_type);
             return;
         }
-    }
 
     let url_path_raw = req.uri().path().to_string();
     let url_path_str = percent_encoding::percent_decode_str(&url_path_raw)
@@ -54,22 +53,16 @@ pub async fn handle_get(req: &mut Request, depot: &mut Depot, res: &mut Response
     }
 
     // Strip extensions: if file doesn't exist and has no extension, try with index extensions
-    if !req_p.exists() && req_p.extension().is_none() && config.strip_extensions {
-        if let Some(rp) = INDEX_EXTENSIONS
+    if !req_p.exists() && req_p.extension().is_none() && config.strip_extensions
+        && let Some(rp) = INDEX_EXTENSIONS
             .iter()
             .map(|ext| req_p.with_extension(ext))
             .find(|rp| rp.exists())
         {
             req_p = rp;
         }
-    }
 
-    if !req_p.exists()
-        || (symlink && !config.follow_symlinks)
-        || (symlink
-            && config.follow_symlinks
-            && config.sandbox_symlinks
-            && !is_descendant_of(&req_p, &config.hosted_directory.1))
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
     {
         handle_nonexistent_get(req, res, &config, &req_p, &url_path_str);
         return;
@@ -125,7 +118,7 @@ fn handle_nonexistent_get(
     req: &mut Request,
     res: &mut Response,
     config: &AppConfig,
-    req_p: &PathBuf,
+    req_p: &Path,
     url_path: &str,
 ) {
     let remote = req.remote_addr().to_string();
@@ -139,25 +132,21 @@ fn handle_nonexistent_get(
     );
 
     // Try 404 fallback file
-    if let Some(ref try_404) = config.try_404 {
-        if try_404.metadata().map(|m| !m.is_dir()).unwrap_or(false) {
+    if let Some(ref try_404) = config.try_404
+        && try_404.metadata().map(|m| !m.is_dir()).unwrap_or(false) {
             let mime_type = guess_mime_type(try_404, &config.mime_type_overrides);
-            match std::fs::read(try_404) {
-                Ok(data) => {
-                    res.status_code(StatusCode::NOT_FOUND);
-                    res.headers_mut().insert(
-                        salvo::http::header::CONTENT_TYPE,
-                        mime_type.parse().unwrap(),
-                    );
-                    res.headers_mut()
-                        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
-                    res.write_body(data).ok();
-                    return;
-                }
-                Err(_) => {}
+            if let Ok(data) = std::fs::read(try_404) {
+                res.status_code(StatusCode::NOT_FOUND);
+                res.headers_mut().insert(
+                    salvo::http::header::CONTENT_TYPE,
+                    mime_type.parse().unwrap(),
+                );
+                res.headers_mut()
+                    .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
+                res.write_body(data).ok();
+                return;
             }
         }
-    }
 
     let body = error_html(
         "404 Not Found",
@@ -181,7 +170,7 @@ async fn handle_get_file(
     req: &mut Request,
     res: &mut Response,
     config: &AppConfig,
-    req_p: &PathBuf,
+    req_p: &Path,
     is_404: bool,
 ) {
     let mime_type = guess_mime_type(req_p, &config.mime_type_overrides);
@@ -210,9 +199,9 @@ async fn handle_get_file(
 
     // Check If-None-Match / If-Modified-Since for 304
     if !is_404 {
-        if let Some(inm) = req.headers().get(salvo::http::header::IF_NONE_MATCH) {
-            if let Ok(inm_str) = inm.to_str() {
-                if inm_str.contains(&etag) {
+        if let Some(inm) = req.headers().get(salvo::http::header::IF_NONE_MATCH)
+            && let Ok(inm_str) = inm.to_str()
+                && inm_str.contains(&etag) {
                     log_msg(config.log, &format!("{} Not Modified", remote));
                     res.status_code(StatusCode::NOT_MODIFIED);
                     res.headers_mut().insert(
@@ -223,12 +212,10 @@ async fn handle_get_file(
                         .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
                     return;
                 }
-            }
-        }
-        if let Some(ims) = req.headers().get(salvo::http::header::IF_MODIFIED_SINCE) {
-            if let Ok(ims_str) = ims.to_str() {
-                if let Ok(since) = chrono::DateTime::parse_from_rfc2822(ims_str) {
-                    if modified <= since.with_timezone(&chrono::Utc) {
+        if let Some(ims) = req.headers().get(salvo::http::header::IF_MODIFIED_SINCE)
+            && let Ok(ims_str) = ims.to_str()
+                && let Ok(since) = chrono::DateTime::parse_from_rfc2822(ims_str)
+                    && modified <= since.with_timezone(&chrono::Utc) {
                         log_msg(config.log, &format!("{} Not Modified", remote));
                         res.status_code(StatusCode::NOT_MODIFIED);
                         res.headers_mut().insert(
@@ -239,9 +226,6 @@ async fn handle_get_file(
                             .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
                         return;
                     }
-                }
-            }
-        }
     }
 
     log_msg(
@@ -262,14 +246,12 @@ async fn handle_get_file(
             .extension()
             .map(|s| !extension_is_blacklisted(s))
             .unwrap_or(true)
-    {
-        if let Some(accept_enc) = req
+        && let Some(accept_enc) = req
             .headers()
             .get(salvo::http::header::ACCEPT_ENCODING)
             .and_then(|v| v.to_str().ok())
-        {
-            if let Some(encoding) = response_encoding(accept_enc) {
-                if let Some(encoded_data) =
+            && let Some(encoding) = response_encoding(accept_enc)
+                && let Some(encoded_data) =
                     try_encoded_file(config, req_p, &etag, encoding, &remote)
                 {
                     res.status_code(if is_404 {
@@ -304,9 +286,6 @@ async fn handle_get_file(
                     res.write_body(encoded_data).ok();
                     return;
                 }
-            }
-        }
-    }
 
     // Serve file without encoding
     let file_data = match tokio::fs::read(req_p).await {
@@ -360,7 +339,7 @@ async fn handle_get_file(
 
 fn try_encoded_file(
     config: &AppConfig,
-    req_p: &PathBuf,
+    req_p: &Path,
     etag: &str,
     encoding: EncodingType,
     remote: &str,
@@ -389,8 +368,8 @@ fn try_encoded_file(
     // Check fs cache
     {
         let cache = config.cache_fs.read().ok()?;
-        if let Some(((resp_p, true, _), atime)) = cache.get(&cache_key) {
-            if let Ok(data) = std::fs::read(resp_p) {
+        if let Some(((resp_p, true, _), atime)) = cache.get(&cache_key)
+            && let Ok(data) = std::fs::read(resp_p) {
                 atime.store(precise_time_ns(), AtomicOrdering::Relaxed);
                 let orig_len = req_p
                     .metadata()
@@ -407,7 +386,6 @@ fn try_encoded_file(
                 );
                 return Some(data);
             }
-        }
         if let Some(((_, false, _), _)) = cache.get(&cache_key) {
             // Previously determined not worth encoding
             return None;
@@ -485,7 +463,7 @@ fn handle_get_file_range(
     req: &mut Request,
     res: &mut Response,
     config: &AppConfig,
-    req_p: &PathBuf,
+    req_p: &Path,
     range_str: &str,
 ) {
     let remote = req.remote_addr().to_string();
@@ -651,7 +629,7 @@ fn handle_get_dir(
     req: &mut Request,
     res: &mut Response,
     config: &AppConfig,
-    req_p: &PathBuf,
+    req_p: &Path,
     url_path: &str,
     url_path_raw: &str,
 ) {
@@ -661,10 +639,7 @@ fn handle_get_dir(
         for ext in INDEX_EXTENSIONS {
             idx.set_extension(ext);
             if idx.exists()
-                && ((!config.follow_symlinks || !config.sandbox_symlinks)
-                    || (config.follow_symlinks
-                        && config.sandbox_symlinks
-                        && is_descendant_of(&req_p, &config.hosted_directory.1)))
+                && (!config.follow_symlinks || !config.sandbox_symlinks || is_descendant_of(req_p, &config.hosted_directory.1))
             {
                 // Check if URL ends with slash
                 if url_path_raw.ends_with('/') {
@@ -679,35 +654,32 @@ fn handle_get_dir(
                             req_p.display()
                         ),
                     );
-                    match std::fs::read(&idx) {
-                        Ok(data) => {
-                            let metadata = idx.metadata().ok();
-                            res.status_code(StatusCode::OK);
+                    if let Ok(data) = std::fs::read(&idx) {
+                        let metadata = idx.metadata().ok();
+                        res.status_code(StatusCode::OK);
+                        res.headers_mut().insert(
+                            salvo::http::header::CONTENT_TYPE,
+                            mime_type.parse().unwrap(),
+                        );
+                        if let Some(ref m) = metadata {
+                            let etag = file_etag(m);
                             res.headers_mut().insert(
-                                salvo::http::header::CONTENT_TYPE,
-                                mime_type.parse().unwrap(),
+                                salvo::http::header::ETAG,
+                                format!("\"{}\"", etag).parse().unwrap(),
                             );
-                            if let Some(ref m) = metadata {
-                                let etag = file_etag(m);
-                                res.headers_mut().insert(
-                                    salvo::http::header::ETAG,
-                                    format!("\"{}\"", etag).parse().unwrap(),
-                                );
-                                res.headers_mut().insert(
-                                    salvo::http::header::LAST_MODIFIED,
-                                    file_time_modified(m)
-                                        .format("%a, %d %b %Y %T GMT")
-                                        .to_string()
-                                        .parse()
-                                        .unwrap(),
-                                );
-                            }
-                            res.headers_mut()
-                                .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
-                            res.write_body(data).ok();
-                            return;
+                            res.headers_mut().insert(
+                                salvo::http::header::LAST_MODIFIED,
+                                file_time_modified(m)
+                                    .format("%a, %d %b %Y %T GMT")
+                                    .to_string()
+                                    .parse()
+                                    .unwrap(),
+                            );
                         }
-                        Err(_) => {}
+                        res.headers_mut()
+                            .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
+                        res.write_body(data).ok();
+                        return;
                     }
                 } else {
                     // Redirect to add trailing slash
@@ -754,7 +726,7 @@ fn handle_dir_listing(
     req: &mut Request,
     res: &mut Response,
     config: &AppConfig,
-    req_p: &PathBuf,
+    req_p: &Path,
     url_path: &str,
 ) {
     let remote = req.remote_addr().to_string();
@@ -818,14 +790,8 @@ fn handle_dir_listing(
             .filter_map(|p| p.ok())
             .filter(|f| {
                 let fp = f.path();
-                let mut symlink = false;
-                !((!config.follow_symlinks && {
-                    symlink = is_symlink(&fp);
-                    symlink
-                }) || (config.follow_symlinks
-                    && config.sandbox_symlinks
-                    && symlink
-                    && !is_descendant_of(fp, &config.hosted_directory.1)))
+                let symlink = is_symlink(&fp);
+                !config.is_symlink_denied(symlink, &fp)
             })
             .collect();
 
@@ -833,12 +799,12 @@ fn handle_dir_listing(
             let lhs_is_file = is_actually_file(
                 &lhs.file_type()
                     .unwrap_or(lhs.metadata().unwrap().file_type()),
-                &lhs.path(),
+                lhs.path(),
             );
             let rhs_is_file = is_actually_file(
                 &rhs.file_type()
                     .unwrap_or(rhs.metadata().unwrap().file_type()),
-                &rhs.path(),
+                rhs.path(),
             );
             (
                 lhs_is_file,
@@ -889,11 +855,11 @@ fn handle_dir_listing(
 
             let escaped_fname = encode_tail_if_trimmed(escape_specials(&fname));
 
-            let _ = write!(
+            let _ = writeln!(
                 out,
                 "<tr id=\"{}\"><td><a href=\"{}{}\" tabindex=\"-1\" class=\"{}{}_icon\"></a></td> <td><a \
                  href=\"{}{}\">{}{}</a></td> <td><a href=\"{}{}\" tabindex=\"-1\"><time ms={}>{}</time></a></td> \
-                 <td><a href=\"{}{}\" tabindex=\"-1\">{}</a></td> {}</tr>\n",
+                 <td><a href=\"{}{}\" tabindex=\"-1\">{}</a></td> {}</tr>",
                 NoDoubleQuotes(&fname),
                 relpath_escaped,
                 escaped_fname,
@@ -998,7 +964,7 @@ fn handle_mobile_dir_listing(
     req: &mut Request,
     res: &mut Response,
     config: &AppConfig,
-    req_p: &PathBuf,
+    req_p: &Path,
     url_path: &str,
 ) {
     let remote = req.remote_addr().to_string();
@@ -1047,22 +1013,18 @@ fn handle_mobile_dir_listing(
             .filter(|f| {
                 let fp = f.path();
                 let symlink = is_symlink(&fp);
-                !((!config.follow_symlinks && symlink)
-                    || (config.follow_symlinks
-                        && config.sandbox_symlinks
-                        && symlink
-                        && !is_descendant_of(&fp, &config.hosted_directory.1)))
+                !config.is_symlink_denied(symlink, &fp)
             })
             .collect();
 
         list.sort_by(|lhs, rhs| {
             let lhs_is_file = lhs
                 .metadata()
-                .map(|m| is_actually_file(&m.file_type(), &lhs.path()))
+                .map(|m| is_actually_file(&m.file_type(), lhs.path()))
                 .unwrap_or(false);
             let rhs_is_file = rhs
                 .metadata()
-                .map(|m| is_actually_file(&m.file_type(), &rhs.path()))
+                .map(|m| is_actually_file(&m.file_type(), rhs.path()))
                 .unwrap_or(false);
             (
                 lhs_is_file,
@@ -1225,19 +1187,18 @@ fn try_encode_generated_response(
 
     // Check gen cache
     {
-        if let Ok(cache) = config.cache_gen.read() {
-            if let Some((enc_resp, atime)) = cache.get(&cache_key) {
+        if let Ok(cache) = config.cache_gen.read()
+            && let Some((enc_resp, atime)) = cache.get(&cache_key) {
                 atime.store(precise_time_ns(), AtomicOrdering::Relaxed);
                 return Some((enc_resp.clone(), encoding));
             }
-        }
     }
 
     // Encode
     let enc_resp = encode_str(body, encoding)?;
 
-    if enc_resp.len() as u64 <= config.encoded_generated_limit {
-        if let Ok(mut cache) = config.cache_gen.write() {
+    if enc_resp.len() as u64 <= config.encoded_generated_limit
+        && let Ok(mut cache) = config.cache_gen.write() {
             config
                 .cache_gen_size
                 .fetch_add(enc_resp.len() as u64, AtomicOrdering::Relaxed);
@@ -1246,7 +1207,6 @@ fn try_encode_generated_response(
                 (enc_resp.clone(), AtomicU64::new(precise_time_ns())),
             );
         }
-    }
 
     Some((enc_resp, encoding))
 }

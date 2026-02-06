@@ -26,11 +26,10 @@ impl AdditionalHeadersHoop {
 
             // Add custom headers
             for (name, value) in &config.additional_headers {
-                if let Ok(hv) = salvo::http::HeaderValue::from_bytes(value) {
-                    if let Ok(hn) = salvo::http::HeaderName::from_bytes(name.as_bytes()) {
+                if let Ok(hv) = salvo::http::HeaderValue::from_bytes(value)
+                    && let Ok(hn) = salvo::http::HeaderName::from_bytes(name.as_bytes()) {
                         res.headers_mut().append(hn, hv);
                     }
-                }
             }
         }
     }

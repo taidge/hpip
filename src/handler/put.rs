@@ -88,11 +88,7 @@ pub async fn handle_put(req: &mut Request, depot: &mut Depot, res: &mut Response
         return;
     }
 
-    let illegal = (symlink && !config.follow_symlinks)
-        || (symlink
-            && config.follow_symlinks
-            && config.sandbox_symlinks
-            && !is_nonexistent_descendant_of(&req_p, &config.hosted_directory.1));
+    let illegal = config.is_symlink_denied_nonexistent(symlink, &req_p);
     if illegal {
         res.status_code(StatusCode::NOT_FOUND);
         res.render(Text::Html(error_html(

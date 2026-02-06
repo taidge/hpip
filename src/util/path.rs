@@ -15,13 +15,12 @@ pub fn percent_decode(s: &str) -> Option<Cow<'_, str>> {
 
 /// Percent-encode the last character if it's white space
 pub fn encode_tail_if_trimmed(mut s: Cow<str>) -> Cow<str> {
-    if let Some(c) = s.as_bytes().last().copied() {
-        if c.is_ascii_whitespace() {
+    if let Some(c) = s.as_bytes().last().copied()
+        && c.is_ascii_whitespace() {
             let ed = unsafe { s.to_mut().as_mut_vec() };
             ed.pop();
             write!(ed, "%{:02X}", c).expect("Couldn't allocate two more characters?");
         }
-    }
     s
 }
 
@@ -156,11 +155,10 @@ pub fn resolve_path(
         }
     }
 
-    if !abs {
-        if let Ok(full) = cur.canonicalize() {
+    if !abs
+        && let Ok(full) = cur.canonicalize() {
             cur = full;
         }
-    }
 
     (cur, sk, err)
 }

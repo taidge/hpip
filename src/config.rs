@@ -1,10 +1,9 @@
 use crate::options::{LogLevel, Options, WebDavLevel};
-use blake3;
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fs;
 use std::num::NonZeroU64;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
@@ -35,10 +34,13 @@ pub struct AppConfig {
     pub path_auth_data: BTreeMap<String, Option<(String, Option<String>)>>,
     pub writes_temp_dir: Option<(String, PathBuf)>,
     pub encoded_temp_dir: Option<(String, PathBuf)>,
+    #[allow(dead_code)]
     pub proxies: BTreeMap<IpCidr, String>,
+    #[allow(dead_code)]
     pub proxy_redirs: BTreeMap<IpCidr, String>,
     pub mime_type_overrides: BTreeMap<OsString, String>,
     pub additional_headers: Vec<(String, Vec<u8>)>,
+    #[allow(dead_code)]
     pub request_bandwidth: Option<NonZeroU64>,
 
     pub cache_gen: RwLock<CacheT<Vec<u8>>>,
@@ -57,6 +59,25 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    /// Returns true if a symlink should be denied access based on follow/sandbox settings.
+    pub fn is_symlink_denied(&self, symlink: bool, path: &Path) -> bool {
+        symlink
+            && (!self.follow_symlinks
+                || (self.sandbox_symlinks
+                    && !crate::util::path::is_descendant_of(path, &self.hosted_directory.1)))
+    }
+
+    /// Like `is_symlink_denied` but uses nonexistent-descendant check (for PUT/create).
+    pub fn is_symlink_denied_nonexistent(&self, symlink: bool, path: &Path) -> bool {
+        symlink
+            && (!self.follow_symlinks
+                || (self.sandbox_symlinks
+                    && !crate::util::path::is_nonexistent_descendant_of(
+                        path,
+                        &self.hosted_directory.1,
+                    )))
+    }
+
     pub fn new(opts: &Options) -> AppConfig {
         let mut path_auth_data = BTreeMap::new();
         let mut global_auth_data = None;
@@ -157,13 +178,11 @@ impl AppConfig {
     }
 
     pub fn create_temp_dir(&self, td: &Option<(String, PathBuf)>) {
-        if let Some((temp_name, temp_dir)) = td {
-            if !temp_dir.exists() {
-                if fs::create_dir_all(temp_dir).is_ok() {
+        if let Some((temp_name, temp_dir)) = td
+            && !temp_dir.exists()
+                && fs::create_dir_all(temp_dir).is_ok() {
                     log_msg(self.log, &format!("Created temp dir {}", temp_name));
                 }
-            }
-        }
     }
 
     pub fn clean_temp_dirs(&self, temp_directory: &(String, PathBuf), generate_tls: bool) {
@@ -193,8 +212,8 @@ impl AppConfig {
         let mut freed_fs = 0u64;
         let mut freed_gen = 0u64;
 
-        if let Some(limit) = self.encoded_filesystem_limit.checked_sub(0) {
-            if limit < u64::MAX && self.cache_fs_size.load(AtomicOrdering::Relaxed) > limit {
+        if let Some(limit) = self.encoded_filesystem_limit.checked_sub(0)
+            && limit < u64::MAX && self.cache_fs_size.load(AtomicOrdering::Relaxed) > limit {
                 start = precise_time_ns();
 
                 let mut cache_files = self
@@ -226,10 +245,9 @@ impl AppConfig {
                     .fetch_sub(freed_fs, AtomicOrdering::Relaxed);
                 cache_files.retain(|_, v| !removed_file_hashes.contains(v));
             }
-        }
 
-        if let Some(limit) = self.encoded_generated_limit.checked_sub(0) {
-            if limit < u64::MAX && self.cache_gen_size.load(AtomicOrdering::Relaxed) > limit {
+        if let Some(limit) = self.encoded_generated_limit.checked_sub(0)
+            && limit < u64::MAX && self.cache_gen_size.load(AtomicOrdering::Relaxed) > limit {
                 if start == 0 {
                     start = precise_time_ns();
                 }
@@ -244,7 +262,7 @@ impl AppConfig {
                         .iter()
                         .min_by_key(|i| (i.1).1.load(AtomicOrdering::Relaxed))
                     {
-                        Some((key, _)) => key.clone(),
+                        Some((key, _)) => *key,
                         None => break,
                     };
                     let (data, _) = cache.remove(&key).unwrap();
@@ -253,7 +271,6 @@ impl AppConfig {
                 self.cache_gen_size
                     .fetch_sub(freed_gen, AtomicOrdering::Relaxed);
             }
-        }
 
         if let Some(limit) = self.encoded_prune {
             if start == 0 {
@@ -326,7 +343,7 @@ impl AppConfig {
     }
 
     fn temp_subdir(
-        &(ref temp_name, ref temp_dir): &(String, PathBuf),
+        (temp_name, temp_dir): &(String, PathBuf),
         flag: bool,
         name: &str,
     ) -> Option<(String, PathBuf)> {

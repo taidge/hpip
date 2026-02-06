@@ -50,12 +50,7 @@ pub async fn handle_delete(req: &mut Request, depot: &mut Depot, res: &mut Respo
         return;
     }
 
-    if !req_p.exists()
-        || (symlink && !config.follow_symlinks)
-        || (symlink
-            && config.follow_symlinks
-            && config.sandbox_symlinks
-            && !is_descendant_of(&req_p, &config.hosted_directory.1))
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
     {
         res.status_code(StatusCode::NOT_FOUND);
         res.render(Text::Html(error_html(

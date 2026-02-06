@@ -2,7 +2,7 @@
 
 **Host These Things Please** - a modern async HTTP file server written in Rust.
 
-> This project is AI-generated and experimental in nature (实验性质的项目).
+> This project is AI-generated and experimental in nature.
 
 Quickly host files and directories over HTTP with support for WebDAV, compression, authentication, TLS, and more.
 

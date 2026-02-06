@@ -60,18 +60,13 @@ pub async fn handle_propfind(req: &mut Request, depot: &mut Depot, res: &mut Res
         return;
     }
 
-    if !req_p.exists()
-        || (symlink && !config.follow_symlinks)
-        || (symlink
-            && config.follow_symlinks
-            && config.sandbox_symlinks
-            && !is_descendant_of(&req_p, &config.hosted_directory.1))
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
     {
         set_error(
             res,
             StatusCode::NOT_FOUND,
             "404 Not Found",
-            &format!("The requested entity doesn't exist."),
+            "The requested entity doesn't exist.",
         );
         return;
     }
@@ -189,10 +184,10 @@ fn write_propfind_output(
     let meta = path.metadata().map_err(|e| e.to_string())?;
 
     if let PropfindVariant::Props(custom) = variant {
-        write_propfind_response_custom(&config, &mut out, url, path, &meta, custom, just_names)
+        write_propfind_response_custom(config, &mut out, url, path, &meta, custom, just_names)
             .map_err(|e| e.to_string())?;
     } else {
-        write_propfind_response(&config, &mut out, url, path, &meta, props, just_names)
+        write_propfind_response(config, &mut out, url, path, &meta, props, just_names)
             .map_err(|e| e.to_string())?;
     }
 
@@ -403,12 +398,7 @@ fn write_propfind_recursive<W: Write>(
                 }
             }
 
-            if path.exists()
-                && !(symlink && !config.follow_symlinks)
-                && !(symlink
-                    && config.follow_symlinks
-                    && config.sandbox_symlinks
-                    && !is_descendant_of(&path, &config.hosted_directory.1))
+            if path.exists() && !config.is_symlink_denied(symlink, &path)
             {
                 let metadata = match path.metadata() {
                     Ok(m) => m,
@@ -471,12 +461,7 @@ fn write_propfind_recursive_custom<W: Write>(
                 }
             }
 
-            if path.exists()
-                && !(symlink && !config.follow_symlinks)
-                && !(symlink
-                    && config.follow_symlinks
-                    && config.sandbox_symlinks
-                    && !is_descendant_of(&path, &config.hosted_directory.1))
+            if path.exists() && !config.is_symlink_denied(symlink, &path)
             {
                 let metadata = match path.metadata() {
                     Ok(m) => m,
@@ -808,12 +793,7 @@ pub async fn handle_proppatch(req: &mut Request, depot: &mut Depot, res: &mut Re
         return;
     }
 
-    if !req_p.exists()
-        || (symlink && !config.follow_symlinks)
-        || (symlink
-            && config.follow_symlinks
-            && config.sandbox_symlinks
-            && !is_descendant_of(&req_p, &config.hosted_directory.1))
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
     {
         set_error(
             res,
@@ -1074,11 +1054,7 @@ pub async fn handle_mkcol(req: &mut Request, depot: &mut Depot, res: &mut Respon
     }
 
     if !req_p.parent().map(|pp| pp.exists()).unwrap_or(true)
-        || (symlink && !config.follow_symlinks)
-        || (symlink
-            && config.follow_symlinks
-            && config.sandbox_symlinks
-            && !is_descendant_of(&req_p, &config.hosted_directory.1))
+        || config.is_symlink_denied(symlink, &req_p)
     {
         res.status_code(StatusCode::CONFLICT);
         return;
@@ -1291,12 +1267,7 @@ async fn handle_copy_move(req: &mut Request, depot: &mut Depot, res: &mut Respon
         return;
     }
 
-    if !req_p.exists()
-        || (symlink && !config.follow_symlinks)
-        || (symlink
-            && config.follow_symlinks
-            && config.sandbox_symlinks
-            && !is_descendant_of(&req_p, &config.hosted_directory.1))
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
     {
         set_error(
             res,
@@ -1308,11 +1279,7 @@ async fn handle_copy_move(req: &mut Request, depot: &mut Depot, res: &mut Respon
     }
 
     if !dest_p.parent().map(|pp| pp.exists()).unwrap_or(true)
-        || (dest_symlink && !config.follow_symlinks)
-        || (dest_symlink
-            && config.follow_symlinks
-            && config.sandbox_symlinks
-            && !is_descendant_of(&dest_p, &config.hosted_directory.1))
+        || config.is_symlink_denied(dest_symlink, &dest_p)
     {
         res.status_code(StatusCode::CONFLICT);
         return;
@@ -1324,12 +1291,11 @@ async fn handle_copy_move(req: &mut Request, depot: &mut Depot, res: &mut Respon
             res.status_code(StatusCode::PRECONDITION_FAILED);
             return;
         }
-        if !is_actually_file(&dest_p.metadata().unwrap().file_type(), &dest_p) {
-            if fs::remove_dir(&dest_p).is_err() {
+        if !is_actually_file(&dest_p.metadata().unwrap().file_type(), &dest_p)
+            && fs::remove_dir(&dest_p).is_err() {
                 res.status_code(StatusCode::LOCKED);
                 return;
             }
-        }
         overwritten = true;
     }
 
@@ -1356,7 +1322,7 @@ async fn handle_copy_move(req: &mut Request, depot: &mut Depot, res: &mut Respon
                 }
                 Err(_) => copy_response(
                     res,
-                    Err(IoError::new(IoErrorKind::Other, "copy failed")),
+                    Err(IoError::other("copy failed")),
                     overwritten,
                 ),
             },

@@ -1,5 +1,5 @@
 use salvo::prelude::*;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -79,12 +79,7 @@ pub async fn handle_rfsapi_inner(req: &mut Request, res: &mut Response, config: 
         return;
     }
 
-    if !req_p.exists()
-        || (symlink && !config.follow_symlinks)
-        || (symlink
-            && config.follow_symlinks
-            && config.sandbox_symlinks
-            && !is_descendant_of(&req_p, &config.hosted_directory.1))
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
     {
         res.status_code(StatusCode::NOT_FOUND);
         res.render(Text::Json(
@@ -106,9 +101,9 @@ pub async fn handle_rfsapi_inner(req: &mut Request, res: &mut Response, config: 
     let is_file = is_actually_file(&metadata.file_type(), &req_p);
 
     if is_file {
-        handle_get_raw_fs_file(req, res, &config, &req_p, &remote);
+        handle_get_raw_fs_file(req, res, config, &req_p, &remote);
     } else {
-        handle_get_raw_fs_dir(req, res, &config, &req_p, &remote, &url_path_raw);
+        handle_get_raw_fs_dir(req, res, config, &req_p, &remote, &url_path_raw);
     }
 }
 
@@ -116,7 +111,7 @@ fn handle_get_raw_fs_file(
     _req: &Request,
     res: &mut Response,
     config: &AppConfig,
-    req_p: &PathBuf,
+    req_p: &Path,
     remote: &str,
 ) {
     log_msg(
@@ -149,7 +144,7 @@ fn handle_get_raw_fs_dir(
     _req: &Request,
     res: &mut Response,
     config: &AppConfig,
-    req_p: &PathBuf,
+    req_p: &Path,
     remote: &str,
     url_path_raw: &str,
 ) {
@@ -175,11 +170,7 @@ fn handle_get_raw_fs_dir(
         .filter(|f| {
             let fp = f.path();
             let symlink = is_symlink(&fp);
-            !((!config.follow_symlinks && symlink)
-                || (config.follow_symlinks
-                    && config.sandbox_symlinks
-                    && symlink
-                    && !is_descendant_of(&fp, &config.hosted_directory.1)))
+            !config.is_symlink_denied(symlink, &fp)
         })
         .map(|f| {
             let path = f.path();

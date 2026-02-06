@@ -1,6 +1,6 @@
 use std::fmt;
 use std::fs;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind, Result as IoResult};
+use std::io::{Error as IoError, Result as IoResult};
 use std::path::Path;
 
 use walkdir::WalkDir;
@@ -141,8 +141,7 @@ pub fn copy_dir(from: &Path, to: &Path) -> IoResult<Vec<(IoError, String)>> {
         .map(|(fc, tc)| tc.starts_with(fc))?
     {
         fs::remove_dir(to)?;
-        return Err(IoError::new(
-            IoErrorKind::Other,
+        return Err(IoError::other(
             "cannot copy to a path prefixed by the source path",
         ));
     }

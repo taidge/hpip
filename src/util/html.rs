@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use std::fmt;
 use std::mem;
 
@@ -5,7 +7,7 @@ pub trait HtmlResponseElement {
     fn commit(self, data: &mut Vec<u8>);
 }
 
-impl<'s> HtmlResponseElement for &'s str {
+impl HtmlResponseElement for &str {
     fn commit(self, data: &mut Vec<u8>) {
         data.extend(self.as_bytes());
     }
@@ -19,7 +21,7 @@ impl HtmlResponseElement for String {
 
 impl<'s> HtmlResponseElement for fmt::Arguments<'s> {
     fn commit(self, data: &mut Vec<u8>) {
-        let mut orig = unsafe { String::from_utf8_unchecked(mem::replace(data, Vec::new())) };
+        let mut orig = unsafe { String::from_utf8_unchecked(std::mem::take(data)) };
         let _ = fmt::write(&mut orig, self);
         let _ = mem::replace(data, orig.into_bytes());
     }

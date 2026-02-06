@@ -32,21 +32,18 @@ pub fn check_auth(req: &Request, config: &Arc<AppConfig>) -> Option<Response> {
         }
     }
 
-    let auth = match auth {
-        Some(a) => a,
-        None => return None,
-    };
+    let auth = auth?;
 
     let remote = req.remote_addr().to_string();
     let method = req.method().to_string();
     let url = req.uri().to_string();
 
     // Check Authorization header
-    if let Some(auth_header) = req.headers().get(salvo::http::header::AUTHORIZATION) {
-        if let Ok(auth_str) = auth_header.to_str() {
-            if auth_str.starts_with("Basic ") {
-                if let Ok(decoded) = base64_decode(&auth_str[6..]) {
-                    if let Ok(cred_str) = String::from_utf8(decoded) {
+    if let Some(auth_header) = req.headers().get(salvo::http::header::AUTHORIZATION)
+        && let Ok(auth_str) = auth_header.to_str()
+            && auth_str.starts_with("Basic ")
+                && let Ok(decoded) = base64_decode(&auth_str[6..])
+                    && let Ok(cred_str) = String::from_utf8(decoded) {
                         let (username, password) = if let Some(pos) = cred_str.find(':') {
                             let u = &cred_str[..pos];
                             let p = &cred_str[pos + 1..];
@@ -88,10 +85,6 @@ pub fn check_auth(req: &Request, config: &Arc<AppConfig>) -> Option<Response> {
                             return Some(resp);
                         }
                     }
-                }
-            }
-        }
-    }
 
     log_msg(
         config.log,

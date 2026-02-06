@@ -23,7 +23,7 @@ fn assets() -> Vec<(&'static str, String)> {
                 "hpip {}",
                 BufReader::new(File::open("Cargo.toml").unwrap())
                     .lines()
-                    .flatten()
+                    .map_while(Result::ok)
                     .find(|l| l.starts_with("version = "))
                     .unwrap()["version = ".len()..]
                     .trim_matches('"')
@@ -48,7 +48,7 @@ fn assets() -> Vec<(&'static str, String)> {
             key,
             format!(
                 "data:image/{};base64,{}",
-                file.split('.').last().unwrap(),
+                file.split('.').next_back().unwrap(),
                 Base64Display::new(&fs::read(file).unwrap()[..], &BASE64_STANDARD_NO_PAD)
             ),
         ));
@@ -134,7 +134,7 @@ fn htmls() {
             }
         }
         write!(&mut out, ">(").unwrap();
-        for (arg, _) in &argsused {
+        for arg in argsused.keys() {
             write!(&mut out, "a{}: T{}, ", arg, arg).unwrap();
         }
         let raw_bytes = data.iter().fold(0, |sz, dt| match dt {
@@ -176,7 +176,8 @@ fn htmls() {
         .unwrap();
     }
 
-    for file in ["assets/directory_listing_achive_inputs.html"] {
+    {
+        let file = "assets/directory_listing_achive_inputs.html";
         println!("cargo:rerun-if-changed={}", file);
         fs::write(
             Path::new(&env::var("OUT_DIR").unwrap()).join(file),
@@ -187,7 +188,7 @@ fn htmls() {
 }
 
 fn extensions() {
-    println!("cargo:rerun-if-changed={}", "assets/encoding_blacklist");
+    println!("cargo:rerun-if-changed=assets/encoding_blacklist");
     let mut out =
         File::create(Path::new(&env::var("OUT_DIR").unwrap()).join("extensions.rs")).unwrap();
 

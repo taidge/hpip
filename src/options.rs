@@ -1,5 +1,4 @@
 use crate::error::Error;
-use blake3;
 use clap::Parser;
 use std::collections::BTreeSet;
 use std::collections::btree_map::{BTreeMap, Entry as BTreeMapEntry};
@@ -429,14 +428,13 @@ impl Options {
         if creds.is_empty() {
             Ok((path, None))
         } else {
-            if let Some((u, p)) = creds.split_once(':') {
-                if u.is_empty() || p.contains(':') {
+            if let Some((u, p)) = creds.split_once(':')
+                && (u.is_empty() || p.contains(':')) {
                     return Err(Error(format!(
                         "Per-path authentication credentials \"{}\" need be in format \"path=[username[:password]]\"",
                         s
                     )));
                 }
-            }
             Ok((path, Some(creds.to_string())))
         }
     }
