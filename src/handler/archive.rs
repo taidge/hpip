@@ -9,6 +9,8 @@ use std::time::SystemTime;
 use std::collections::btree_map::{BTreeMap, Entry as BTreeMapEntry};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
+use std::path::PathBuf;
 
 use tar::Builder as TarBuilder;
 #[cfg(unix)]
