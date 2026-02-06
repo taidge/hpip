@@ -1,7 +1,6 @@
-use std::fmt;
-use std::fs;
 use std::io::{Error as IoError, Result as IoResult};
 use std::path::Path;
+use std::{fmt, fs};
 
 use walkdir::WalkDir;
 use xml::name::Name as XmlName;

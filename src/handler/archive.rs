@@ -1,17 +1,16 @@
-use salvo::prelude::*;
+#[cfg(unix)]
+use std::collections::btree_map::{BTreeMap, Entry as BTreeMapEntry};
 use std::io::{self, ErrorKind as IoErrorKind, Result as IoResult};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
 use std::str;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-#[cfg(unix)]
-use std::collections::btree_map::{BTreeMap, Entry as BTreeMapEntry};
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-#[cfg(unix)]
-use std::path::PathBuf;
-
+use salvo::prelude::*;
 use tar::Builder as TarBuilder;
 #[cfg(unix)]
 use tar::{EntryType as TarEntryType, Header as TarHeader};
@@ -186,8 +185,7 @@ fn serve_archive(req: &Request, res: &mut Response, config: &AppConfig, archive_
         return;
     }
 
-    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
-    {
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p) {
         res.status_code(StatusCode::NOT_FOUND);
         res.render(Text::Html(error_html(
             "404 Not Found",

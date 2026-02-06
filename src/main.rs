@@ -8,15 +8,15 @@ mod port;
 mod tls;
 pub mod util;
 
-use config::AppConfig;
-use error::Error;
-use options::Options;
 use std::hash::{BuildHasher, RandomState};
 use std::mem;
 use std::net::IpAddr;
 use std::process::exit;
 use std::sync::Arc;
 
+use config::AppConfig;
+use error::Error;
+use options::Options;
 use salvo::prelude::*;
 
 fn main() {

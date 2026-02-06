@@ -1,9 +1,9 @@
-use crate::error::Error;
-use std::fmt;
-use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::{fmt, fs};
+
+use crate::error::Error;
 
 /// Generate a passwordless self-signed certificate in the `"tls"` subdirectory
 /// of the specified directory.

@@ -1,10 +1,11 @@
+use std::fs::File;
+use std::io::{self, BufReader, BufWriter, Write};
+use std::path::Path;
+
 use brotli::enc::BrotliCompress as brotli_compress;
 use brotli::enc::backward_references::BrotliEncoderParams;
 use flate2::Compression as Flate2Compression;
 use flate2::write::{DeflateEncoder, GzEncoder};
-use std::fs::File;
-use std::io::{self, BufReader, BufWriter, Write};
-use std::path::Path;
 
 use crate::config::EncodingType;
 

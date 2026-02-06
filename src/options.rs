@@ -1,5 +1,3 @@
-use crate::error::Error;
-use clap::Parser;
 use std::collections::BTreeSet;
 use std::collections::btree_map::{BTreeMap, Entry as BTreeMapEntry};
 use std::env;
@@ -10,6 +8,9 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use cidr::IpCidr;
+use clap::Parser;
+
+use crate::error::Error;
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogLevel {
@@ -429,12 +430,13 @@ impl Options {
             Ok((path, None))
         } else {
             if let Some((u, p)) = creds.split_once(':')
-                && (u.is_empty() || p.contains(':')) {
-                    return Err(Error(format!(
-                        "Per-path authentication credentials \"{}\" need be in format \"path=[username[:password]]\"",
-                        s
-                    )));
-                }
+                && (u.is_empty() || p.contains(':'))
+            {
+                return Err(Error(format!(
+                    "Per-path authentication credentials \"{}\" need be in format \"path=[username[:password]]\"",
+                    s
+                )));
+            }
             Ok((path, Some(creds.to_string())))
         }
     }

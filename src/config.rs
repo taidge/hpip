@@ -1,4 +1,3 @@
-use crate::options::{LogLevel, Options, WebDavLevel};
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fs;
@@ -8,6 +7,8 @@ use std::sync::RwLock;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 use cidr::IpCidr;
+
+use crate::options::{LogLevel, Options, WebDavLevel};
 
 pub type CacheT<Cnt> = HashMap<(blake3::Hash, EncodingType), (Cnt, AtomicU64)>;
 
@@ -180,9 +181,10 @@ impl AppConfig {
     pub fn create_temp_dir(&self, td: &Option<(String, PathBuf)>) {
         if let Some((temp_name, temp_dir)) = td
             && !temp_dir.exists()
-                && fs::create_dir_all(temp_dir).is_ok() {
-                    log_msg(self.log, &format!("Created temp dir {}", temp_name));
-                }
+            && fs::create_dir_all(temp_dir).is_ok()
+        {
+            log_msg(self.log, &format!("Created temp dir {}", temp_name));
+        }
     }
 
     pub fn clean_temp_dirs(&self, temp_directory: &(String, PathBuf), generate_tls: bool) {
@@ -205,72 +207,77 @@ impl AppConfig {
     }
 
     pub fn prune(&self) {
-        use crate::util::precise_time_ns;
         use std::collections::HashSet;
+
+        use crate::util::precise_time_ns;
 
         let mut start = 0u64;
         let mut freed_fs = 0u64;
         let mut freed_gen = 0u64;
 
         if let Some(limit) = self.encoded_filesystem_limit.checked_sub(0)
-            && limit < u64::MAX && self.cache_fs_size.load(AtomicOrdering::Relaxed) > limit {
-                start = precise_time_ns();
+            && limit < u64::MAX
+            && self.cache_fs_size.load(AtomicOrdering::Relaxed) > limit
+        {
+            start = precise_time_ns();
 
-                let mut cache_files = self
-                    .cache_fs_files
-                    .write()
-                    .expect("Filesystem files cache write lock poisoned");
-                let mut removed_file_hashes = HashSet::new();
-                let mut cache = self
-                    .cache_fs
-                    .write()
-                    .expect("Filesystem cache write lock poisoned");
-                let size = self.cache_fs_size.load(AtomicOrdering::Relaxed);
-                while size - freed_fs > limit {
-                    let key = match cache
-                        .iter()
-                        .min_by_key(|i| (i.1).1.load(AtomicOrdering::Relaxed))
-                    {
-                        Some((key, ((path, _, _), _))) => match fs::remove_file(path) {
-                            Ok(()) => *key,
-                            Err(_) => break,
-                        },
-                        None => break,
-                    };
-                    let ((_, _, sz), _) = cache.remove(&key).unwrap();
-                    freed_fs += sz;
-                    removed_file_hashes.insert(key.0);
-                }
-                self.cache_fs_size
-                    .fetch_sub(freed_fs, AtomicOrdering::Relaxed);
-                cache_files.retain(|_, v| !removed_file_hashes.contains(v));
+            let mut cache_files = self
+                .cache_fs_files
+                .write()
+                .expect("Filesystem files cache write lock poisoned");
+            let mut removed_file_hashes = HashSet::new();
+            let mut cache = self
+                .cache_fs
+                .write()
+                .expect("Filesystem cache write lock poisoned");
+            let size = self.cache_fs_size.load(AtomicOrdering::Relaxed);
+            while size - freed_fs > limit {
+                let key = match cache
+                    .iter()
+                    .min_by_key(|i| (i.1).1.load(AtomicOrdering::Relaxed))
+                {
+                    Some((key, ((path, ..), _))) => match fs::remove_file(path) {
+                        Ok(()) => *key,
+                        Err(_) => break,
+                    },
+                    None => break,
+                };
+                let ((_, _, sz), _) = cache.remove(&key).unwrap();
+                freed_fs += sz;
+                removed_file_hashes.insert(key.0);
             }
+            self.cache_fs_size
+                .fetch_sub(freed_fs, AtomicOrdering::Relaxed);
+            cache_files.retain(|_, v| !removed_file_hashes.contains(v));
+        }
 
         if let Some(limit) = self.encoded_generated_limit.checked_sub(0)
-            && limit < u64::MAX && self.cache_gen_size.load(AtomicOrdering::Relaxed) > limit {
-                if start == 0 {
-                    start = precise_time_ns();
-                }
-
-                let mut cache = self
-                    .cache_gen
-                    .write()
-                    .expect("Generated file cache write lock poisoned");
-                let size = self.cache_gen_size.load(AtomicOrdering::Relaxed);
-                while size - freed_gen > limit {
-                    let key = match cache
-                        .iter()
-                        .min_by_key(|i| (i.1).1.load(AtomicOrdering::Relaxed))
-                    {
-                        Some((key, _)) => *key,
-                        None => break,
-                    };
-                    let (data, _) = cache.remove(&key).unwrap();
-                    freed_gen += data.len() as u64;
-                }
-                self.cache_gen_size
-                    .fetch_sub(freed_gen, AtomicOrdering::Relaxed);
+            && limit < u64::MAX
+            && self.cache_gen_size.load(AtomicOrdering::Relaxed) > limit
+        {
+            if start == 0 {
+                start = precise_time_ns();
             }
+
+            let mut cache = self
+                .cache_gen
+                .write()
+                .expect("Generated file cache write lock poisoned");
+            let size = self.cache_gen_size.load(AtomicOrdering::Relaxed);
+            while size - freed_gen > limit {
+                let key = match cache
+                    .iter()
+                    .min_by_key(|i| (i.1).1.load(AtomicOrdering::Relaxed))
+                {
+                    Some((key, _)) => *key,
+                    None => break,
+                };
+                let (data, _) = cache.remove(&key).unwrap();
+                freed_gen += data.len() as u64;
+            }
+            self.cache_gen_size
+                .fetch_sub(freed_gen, AtomicOrdering::Relaxed);
+        }
 
         if let Some(limit) = self.encoded_prune {
             if start == 0 {

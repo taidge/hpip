@@ -1,16 +1,15 @@
-use salvo::prelude::*;
 use std::fs::{self, Metadata};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Write};
 use std::mem;
 use std::path::Path;
 use std::sync::Arc;
 
-use xml::EmitterConfig as XmlEmitterConfig;
-use xml::ParserConfig as XmlParserConfig;
+use salvo::prelude::*;
 use xml::common::{Position, XmlVersion};
 use xml::name::{Name as XmlName, OwnedName as OwnedXmlName};
 use xml::reader::{EventReader as XmlReader, XmlEvent as XmlREvent};
 use xml::writer::{EventWriter as XmlWriter, XmlEvent as XmlWEvent};
+use xml::{EmitterConfig as XmlEmitterConfig, ParserConfig as XmlParserConfig};
 
 use crate::config::{AppConfig, log_msg};
 use crate::util::webdav::*;
@@ -60,8 +59,7 @@ pub async fn handle_propfind(req: &mut Request, depot: &mut Depot, res: &mut Res
         return;
     }
 
-    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
-    {
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p) {
         set_error(
             res,
             StatusCode::NOT_FOUND,
@@ -398,8 +396,7 @@ fn write_propfind_recursive<W: Write>(
                 }
             }
 
-            if path.exists() && !config.is_symlink_denied(symlink, &path)
-            {
+            if path.exists() && !config.is_symlink_denied(symlink, &path) {
                 let metadata = match path.metadata() {
                     Ok(m) => m,
                     Err(_) => continue,
@@ -461,8 +458,7 @@ fn write_propfind_recursive_custom<W: Write>(
                 }
             }
 
-            if path.exists() && !config.is_symlink_denied(symlink, &path)
-            {
+            if path.exists() && !config.is_symlink_denied(symlink, &path) {
                 let metadata = match path.metadata() {
                     Ok(m) => m,
                     Err(_) => continue,
@@ -793,8 +789,7 @@ pub async fn handle_proppatch(req: &mut Request, depot: &mut Depot, res: &mut Re
         return;
     }
 
-    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
-    {
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p) {
         set_error(
             res,
             StatusCode::NOT_FOUND,
@@ -1105,7 +1100,7 @@ pub async fn handle_move(req: &mut Request, depot: &mut Depot, res: &mut Respons
     let config = depot.obtain::<Arc<AppConfig>>().unwrap().clone();
     let url_path_raw = req.uri().path().to_string();
     let segments: Vec<&str> = url_path_raw.split('/').filter(|s| !s.is_empty()).collect();
-    let (req_p, _, _) = resolve_path(
+    let (req_p, ..) = resolve_path(
         &config.hosted_directory.1,
         &segments,
         config.follow_symlinks,
@@ -1267,8 +1262,7 @@ async fn handle_copy_move(req: &mut Request, depot: &mut Depot, res: &mut Respon
         return;
     }
 
-    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
-    {
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p) {
         set_error(
             res,
             StatusCode::NOT_FOUND,
@@ -1292,10 +1286,11 @@ async fn handle_copy_move(req: &mut Request, depot: &mut Depot, res: &mut Respon
             return;
         }
         if !is_actually_file(&dest_p.metadata().unwrap().file_type(), &dest_p)
-            && fs::remove_dir(&dest_p).is_err() {
-                res.status_code(StatusCode::LOCKED);
-                return;
-            }
+            && fs::remove_dir(&dest_p).is_err()
+        {
+            res.status_code(StatusCode::LOCKED);
+            return;
+        }
         overwritten = true;
     }
 
@@ -1320,11 +1315,7 @@ async fn handle_copy_move(req: &mut Request, depot: &mut Depot, res: &mut Respon
                         }
                     }
                 }
-                Err(_) => copy_response(
-                    res,
-                    Err(IoError::other("copy failed")),
-                    overwritten,
-                ),
+                Err(_) => copy_response(res, Err(IoError::other("copy failed")), overwritten),
             },
             _ => {
                 set_error(

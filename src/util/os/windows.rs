@@ -2,6 +2,7 @@ use std::fs::{File, Metadata};
 use std::os::windows::fs::MetadataExt;
 use std::os::windows::io::AsRawHandle;
 use std::path::Path;
+
 use windows_sys::Win32::Foundation::FILETIME;
 use windows_sys::Win32::Storage::FileSystem::{GetFileAttributesW, SetFileTime};
 
@@ -59,9 +60,10 @@ pub fn set_times_f(f: &File, mtime_ms: Option<u64>, atime_ms: Option<u64>, ctime
 
 pub fn set_times(f: &Path, mtime_ms: Option<u64>, atime_ms: Option<u64>, ctime_ms: Option<u64>) {
     if (mtime_ms.is_some() || atime_ms.is_some() || ctime_ms.is_some())
-        && let Ok(f) = File::options().write(true).open(f) {
-            set_times_f(&f, mtime_ms, atime_ms, ctime_ms);
-        }
+        && let Ok(f) = File::options().write(true).open(f)
+    {
+        set_times_f(&f, mtime_ms, atime_ms, ctime_ms);
+    }
 }
 
 /// FILETIME is in increments of 100ns, and in the Win32 epoch

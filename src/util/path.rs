@@ -1,8 +1,9 @@
-use percent_encoding;
 use std::borrow::Cow;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+
+use percent_encoding;
 
 use super::MAX_SYMLINKS;
 
@@ -16,11 +17,12 @@ pub fn percent_decode(s: &str) -> Option<Cow<'_, str>> {
 /// Percent-encode the last character if it's white space
 pub fn encode_tail_if_trimmed(mut s: Cow<str>) -> Cow<str> {
     if let Some(c) = s.as_bytes().last().copied()
-        && c.is_ascii_whitespace() {
-            let ed = unsafe { s.to_mut().as_mut_vec() };
-            ed.pop();
-            write!(ed, "%{:02X}", c).expect("Couldn't allocate two more characters?");
-        }
+        && c.is_ascii_whitespace()
+    {
+        let ed = unsafe { s.to_mut().as_mut_vec() };
+        ed.pop();
+        write!(ed, "%{:02X}", c).expect("Couldn't allocate two more characters?");
+    }
     s
 }
 
@@ -155,10 +157,9 @@ pub fn resolve_path(
         }
     }
 
-    if !abs
-        && let Ok(full) = cur.canonicalize() {
-            cur = full;
-        }
+    if !abs && let Ok(full) = cur.canonicalize() {
+        cur = full;
+    }
 
     (cur, sk, err)
 }

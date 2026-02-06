@@ -1,9 +1,10 @@
-use libc::{AT_FDCWD, AT_SYMLINK_NOFOLLOW, UTIME_OMIT, futimens, timespec, utimensat};
 use std::fs::{self, File, Metadata};
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
+
+use libc::{AT_FDCWD, AT_SYMLINK_NOFOLLOW, UTIME_OMIT, futimens, timespec, utimensat};
 
 use super::super::file::is_actually_file;
 

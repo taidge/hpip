@@ -1,5 +1,6 @@
-use salvo::prelude::*;
 use std::sync::Arc;
+
+use salvo::prelude::*;
 
 use crate::config::AppConfig;
 use crate::util::*;
@@ -50,8 +51,7 @@ pub async fn handle_delete(req: &mut Request, depot: &mut Depot, res: &mut Respo
         return;
     }
 
-    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
-    {
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p) {
         res.status_code(StatusCode::NOT_FOUND);
         res.render(Text::Html(error_html(
             "404 Not Found",

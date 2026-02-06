@@ -1,7 +1,7 @@
-use salvo::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
 
+use salvo::prelude::*;
 use serde::Serialize;
 
 use crate::config::{AppConfig, log_msg};
@@ -79,8 +79,7 @@ pub async fn handle_rfsapi_inner(req: &mut Request, res: &mut Response, config: 
         return;
     }
 
-    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
-    {
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p) {
         res.status_code(StatusCode::NOT_FOUND);
         res.render(Text::Json(
             serde_json::json!({"error": "Not found"}).to_string(),

@@ -1,12 +1,13 @@
 extern crate base64;
 
-use base64::display::Base64Display;
-use base64::engine::general_purpose::STANDARD_NO_PAD as BASE64_STANDARD_NO_PAD;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
+
+use base64::display::Base64Display;
+use base64::engine::general_purpose::STANDARD_NO_PAD as BASE64_STANDARD_NO_PAD;
 
 fn main() {
     htmls();

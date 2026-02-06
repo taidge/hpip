@@ -1,7 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
-use std::fmt;
-use std::mem;
+use std::{fmt, mem};
 
 pub trait HtmlResponseElement {
     fn commit(self, data: &mut Vec<u8>);

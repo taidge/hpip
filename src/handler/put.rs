@@ -1,6 +1,7 @@
-use salvo::prelude::*;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use salvo::prelude::*;
 use tokio::io::AsyncWriteExt;
 
 use crate::config::AppConfig;

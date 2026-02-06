@@ -1,5 +1,6 @@
-use salvo::prelude::*;
 use std::sync::Arc;
+
+use salvo::prelude::*;
 
 use crate::config::AppConfig;
 use crate::util::USER_AGENT;

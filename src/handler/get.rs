@@ -1,9 +1,10 @@
-use salvo::prelude::*;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write as IoWrite};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+
+use salvo::prelude::*;
 
 use crate::config::{AppConfig, EncodingType, log_msg};
 use crate::encoding::compress::*;
@@ -28,10 +29,11 @@ pub async fn handle_get(req: &mut Request, depot: &mut Depot, res: &mut Response
 
     // Check for archive request via Accept header
     if config.archives
-        && let Some(archive_type) = crate::handler::archive::try_get_accept_archive(req) {
-            crate::handler::archive::serve_archive_from_get(req, res, &config, archive_type);
-            return;
-        }
+        && let Some(archive_type) = crate::handler::archive::try_get_accept_archive(req)
+    {
+        crate::handler::archive::serve_archive_from_get(req, res, &config, archive_type);
+        return;
+    }
 
     let url_path_raw = req.uri().path().to_string();
     let url_path_str = percent_encoding::percent_decode_str(&url_path_raw)
@@ -53,17 +55,18 @@ pub async fn handle_get(req: &mut Request, depot: &mut Depot, res: &mut Response
     }
 
     // Strip extensions: if file doesn't exist and has no extension, try with index extensions
-    if !req_p.exists() && req_p.extension().is_none() && config.strip_extensions
+    if !req_p.exists()
+        && req_p.extension().is_none()
+        && config.strip_extensions
         && let Some(rp) = INDEX_EXTENSIONS
             .iter()
             .map(|ext| req_p.with_extension(ext))
             .find(|rp| rp.exists())
-        {
-            req_p = rp;
-        }
-
-    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p)
     {
+        req_p = rp;
+    }
+
+    if !req_p.exists() || config.is_symlink_denied(symlink, &req_p) {
         handle_nonexistent_get(req, res, &config, &req_p, &url_path_str);
         return;
     }
@@ -133,20 +136,21 @@ fn handle_nonexistent_get(
 
     // Try 404 fallback file
     if let Some(ref try_404) = config.try_404
-        && try_404.metadata().map(|m| !m.is_dir()).unwrap_or(false) {
-            let mime_type = guess_mime_type(try_404, &config.mime_type_overrides);
-            if let Ok(data) = std::fs::read(try_404) {
-                res.status_code(StatusCode::NOT_FOUND);
-                res.headers_mut().insert(
-                    salvo::http::header::CONTENT_TYPE,
-                    mime_type.parse().unwrap(),
-                );
-                res.headers_mut()
-                    .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
-                res.write_body(data).ok();
-                return;
-            }
+        && try_404.metadata().map(|m| !m.is_dir()).unwrap_or(false)
+    {
+        let mime_type = guess_mime_type(try_404, &config.mime_type_overrides);
+        if let Ok(data) = std::fs::read(try_404) {
+            res.status_code(StatusCode::NOT_FOUND);
+            res.headers_mut().insert(
+                salvo::http::header::CONTENT_TYPE,
+                mime_type.parse().unwrap(),
+            );
+            res.headers_mut()
+                .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
+            res.write_body(data).ok();
+            return;
         }
+    }
 
     let body = error_html(
         "404 Not Found",
@@ -201,31 +205,33 @@ async fn handle_get_file(
     if !is_404 {
         if let Some(inm) = req.headers().get(salvo::http::header::IF_NONE_MATCH)
             && let Ok(inm_str) = inm.to_str()
-                && inm_str.contains(&etag) {
-                    log_msg(config.log, &format!("{} Not Modified", remote));
-                    res.status_code(StatusCode::NOT_MODIFIED);
-                    res.headers_mut().insert(
-                        salvo::http::header::ETAG,
-                        format!("\"{}\"", etag).parse().unwrap(),
-                    );
-                    res.headers_mut()
-                        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
-                    return;
-                }
+            && inm_str.contains(&etag)
+        {
+            log_msg(config.log, &format!("{} Not Modified", remote));
+            res.status_code(StatusCode::NOT_MODIFIED);
+            res.headers_mut().insert(
+                salvo::http::header::ETAG,
+                format!("\"{}\"", etag).parse().unwrap(),
+            );
+            res.headers_mut()
+                .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
+            return;
+        }
         if let Some(ims) = req.headers().get(salvo::http::header::IF_MODIFIED_SINCE)
             && let Ok(ims_str) = ims.to_str()
-                && let Ok(since) = chrono::DateTime::parse_from_rfc2822(ims_str)
-                    && modified <= since.with_timezone(&chrono::Utc) {
-                        log_msg(config.log, &format!("{} Not Modified", remote));
-                        res.status_code(StatusCode::NOT_MODIFIED);
-                        res.headers_mut().insert(
-                            salvo::http::header::ETAG,
-                            format!("\"{}\"", etag).parse().unwrap(),
-                        );
-                        res.headers_mut()
-                            .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
-                        return;
-                    }
+            && let Ok(since) = chrono::DateTime::parse_from_rfc2822(ims_str)
+            && modified <= since.with_timezone(&chrono::Utc)
+        {
+            log_msg(config.log, &format!("{} Not Modified", remote));
+            res.status_code(StatusCode::NOT_MODIFIED);
+            res.headers_mut().insert(
+                salvo::http::header::ETAG,
+                format!("\"{}\"", etag).parse().unwrap(),
+            );
+            res.headers_mut()
+                .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
+            return;
+        }
     }
 
     log_msg(
@@ -250,42 +256,41 @@ async fn handle_get_file(
             .headers()
             .get(salvo::http::header::ACCEPT_ENCODING)
             .and_then(|v| v.to_str().ok())
-            && let Some(encoding) = response_encoding(accept_enc)
-                && let Some(encoded_data) =
-                    try_encoded_file(config, req_p, &etag, encoding, &remote)
-                {
-                    res.status_code(if is_404 {
-                        StatusCode::NOT_FOUND
-                    } else {
-                        StatusCode::OK
-                    });
-                    res.headers_mut().insert(
-                        salvo::http::header::CONTENT_TYPE,
-                        mime_type.parse().unwrap(),
-                    );
-                    res.headers_mut().insert(
-                        salvo::http::header::CONTENT_ENCODING,
-                        encoding_name(encoding).parse().unwrap(),
-                    );
-                    res.headers_mut().insert(
-                        salvo::http::header::ETAG,
-                        format!("\"{}\"", etag).parse().unwrap(),
-                    );
-                    res.headers_mut().insert(
-                        salvo::http::header::LAST_MODIFIED,
-                        modified
-                            .format("%a, %d %b %Y %T GMT")
-                            .to_string()
-                            .parse()
-                            .unwrap(),
-                    );
-                    res.headers_mut()
-                        .insert(salvo::http::header::ACCEPT_RANGES, "bytes".parse().unwrap());
-                    res.headers_mut()
-                        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
-                    res.write_body(encoded_data).ok();
-                    return;
-                }
+        && let Some(encoding) = response_encoding(accept_enc)
+        && let Some(encoded_data) = try_encoded_file(config, req_p, &etag, encoding, &remote)
+    {
+        res.status_code(if is_404 {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::OK
+        });
+        res.headers_mut().insert(
+            salvo::http::header::CONTENT_TYPE,
+            mime_type.parse().unwrap(),
+        );
+        res.headers_mut().insert(
+            salvo::http::header::CONTENT_ENCODING,
+            encoding_name(encoding).parse().unwrap(),
+        );
+        res.headers_mut().insert(
+            salvo::http::header::ETAG,
+            format!("\"{}\"", etag).parse().unwrap(),
+        );
+        res.headers_mut().insert(
+            salvo::http::header::LAST_MODIFIED,
+            modified
+                .format("%a, %d %b %Y %T GMT")
+                .to_string()
+                .parse()
+                .unwrap(),
+        );
+        res.headers_mut()
+            .insert(salvo::http::header::ACCEPT_RANGES, "bytes".parse().unwrap());
+        res.headers_mut()
+            .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
+        res.write_body(encoded_data).ok();
+        return;
+    }
 
     // Serve file without encoding
     let file_data = match tokio::fs::read(req_p).await {
@@ -369,23 +374,24 @@ fn try_encoded_file(
     {
         let cache = config.cache_fs.read().ok()?;
         if let Some(((resp_p, true, _), atime)) = cache.get(&cache_key)
-            && let Ok(data) = std::fs::read(resp_p) {
-                atime.store(precise_time_ns(), AtomicOrdering::Relaxed);
-                let orig_len = req_p
-                    .metadata()
-                    .map(|m| file_length(&m, req_p))
-                    .unwrap_or(0);
-                log_msg(
-                    config.log,
-                    &format!(
-                        "{} encoded as {} for {:.1}% ratio (cached)",
-                        remote,
-                        encoding_name(encoding),
-                        (orig_len as f64) / (data.len() as f64) * 100.0
-                    ),
-                );
-                return Some(data);
-            }
+            && let Ok(data) = std::fs::read(resp_p)
+        {
+            atime.store(precise_time_ns(), AtomicOrdering::Relaxed);
+            let orig_len = req_p
+                .metadata()
+                .map(|m| file_length(&m, req_p))
+                .unwrap_or(0);
+            log_msg(
+                config.log,
+                &format!(
+                    "{} encoded as {} for {:.1}% ratio (cached)",
+                    remote,
+                    encoding_name(encoding),
+                    (orig_len as f64) / (data.len() as f64) * 100.0
+                ),
+            );
+            return Some(data);
+        }
         if let Some(((_, false, _), _)) = cache.get(&cache_key) {
             // Previously determined not worth encoding
             return None;
@@ -639,7 +645,9 @@ fn handle_get_dir(
         for ext in INDEX_EXTENSIONS {
             idx.set_extension(ext);
             if idx.exists()
-                && (!config.follow_symlinks || !config.sandbox_symlinks || is_descendant_of(req_p, &config.hosted_directory.1))
+                && (!config.follow_symlinks
+                    || !config.sandbox_symlinks
+                    || is_descendant_of(req_p, &config.hosted_directory.1))
             {
                 // Check if URL ends with slash
                 if url_path_raw.ends_with('/') {
@@ -1188,25 +1196,27 @@ fn try_encode_generated_response(
     // Check gen cache
     {
         if let Ok(cache) = config.cache_gen.read()
-            && let Some((enc_resp, atime)) = cache.get(&cache_key) {
-                atime.store(precise_time_ns(), AtomicOrdering::Relaxed);
-                return Some((enc_resp.clone(), encoding));
-            }
+            && let Some((enc_resp, atime)) = cache.get(&cache_key)
+        {
+            atime.store(precise_time_ns(), AtomicOrdering::Relaxed);
+            return Some((enc_resp.clone(), encoding));
+        }
     }
 
     // Encode
     let enc_resp = encode_str(body, encoding)?;
 
     if enc_resp.len() as u64 <= config.encoded_generated_limit
-        && let Ok(mut cache) = config.cache_gen.write() {
-            config
-                .cache_gen_size
-                .fetch_add(enc_resp.len() as u64, AtomicOrdering::Relaxed);
-            cache.insert(
-                cache_key,
-                (enc_resp.clone(), AtomicU64::new(precise_time_ns())),
-            );
-        }
+        && let Ok(mut cache) = config.cache_gen.write()
+    {
+        config
+            .cache_gen_size
+            .fetch_add(enc_resp.len() as u64, AtomicOrdering::Relaxed);
+        cache.insert(
+            cache_key,
+            (enc_resp.clone(), AtomicU64::new(precise_time_ns())),
+        );
+    }
 
     Some((enc_resp, encoding))
 }
