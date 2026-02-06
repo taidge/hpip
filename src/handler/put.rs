@@ -37,13 +37,13 @@ pub async fn handle_put(req: &mut Request, depot: &mut Depot, res: &mut Response
         .map(|s| s.to_string())
         .unwrap_or_default();
 
-    let segments: Vec<&str> = url_path_str
-        .split('/')
-        .filter(|s| !s.is_empty())
-        .collect();
+    let segments: Vec<&str> = url_path_str.split('/').filter(|s| !s.is_empty()).collect();
 
-    let (req_p, symlink, url_err) =
-        resolve_path(&config.hosted_directory.1, &segments, config.follow_symlinks);
+    let (req_p, symlink, url_err) = resolve_path(
+        &config.hosted_directory.1,
+        &segments,
+        config.follow_symlinks,
+    );
 
     if url_err {
         res.status_code(StatusCode::BAD_REQUEST);
@@ -97,10 +97,7 @@ pub async fn handle_put(req: &mut Request, depot: &mut Depot, res: &mut Response
         res.status_code(StatusCode::NOT_FOUND);
         res.render(Text::Html(error_html(
             "404 Not Found",
-            format!(
-                "The requested entity \"{}\" doesn't exist.",
-                url_path_str
-            ),
+            format!("The requested entity \"{}\" doesn't exist.", url_path_str),
             "",
         )));
         return;
@@ -187,7 +184,11 @@ pub async fn handle_put(req: &mut Request, depot: &mut Depot, res: &mut Response
     }
 }
 
-async fn write_file(config: &AppConfig, req_p: &PathBuf, data: &[u8]) -> Result<(), std::io::Error> {
+async fn write_file(
+    config: &AppConfig,
+    req_p: &PathBuf,
+    data: &[u8],
+) -> Result<(), std::io::Error> {
     // Try direct creation first
     match tokio::fs::OpenOptions::new()
         .write(true)
@@ -204,11 +205,8 @@ async fn write_file(config: &AppConfig, req_p: &PathBuf, data: &[u8]) -> Result<
             // File exists or error; use temp file approach
             config.create_temp_dir(&config.writes_temp_dir);
             let temp_dir = &config.writes_temp_dir.as_ref().unwrap().1;
-            let temp_file_p = temp_dir.join(
-                req_p
-                    .file_name()
-                    .unwrap_or(std::ffi::OsStr::new("upload")),
-            );
+            let temp_file_p =
+                temp_dir.join(req_p.file_name().unwrap_or(std::ffi::OsStr::new("upload")));
 
             // Write to temp
             {

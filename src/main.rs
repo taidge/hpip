@@ -48,8 +48,7 @@ async fn result_main() -> Result<(), Error> {
     }
 
     for path in mem::take(&mut opts.generate_path_auth) {
-        opts.path_auth_data
-            .insert(path, Some(generate_auth_data()));
+        opts.path_auth_data.insert(path, Some(generate_auth_data()));
     }
 
     let config = Arc::new(AppConfig::new(&opts));
@@ -196,10 +195,7 @@ fn build_router(config: Arc<AppConfig>) -> Router {
     let webdav_level = config.webdav;
 
     // Build a function that adds common method handlers to a router
-    fn add_methods(
-        router: Router,
-        webdav_level: options::WebDavLevel,
-    ) -> Router {
+    fn add_methods(router: Router, webdav_level: options::WebDavLevel) -> Router {
         let mut r = router
             .get(handler::get::handle_get)
             .put(handler::put::handle_put)
@@ -210,17 +206,36 @@ fn build_router(config: Arc<AppConfig>) -> Router {
         // WebDAV methods via custom filter
         if webdav_level == options::WebDavLevel::All {
             r = r
-                .push(Router::new().filter_fn(|req, _| req.method().as_str() == "PROPFIND").goal(handler::webdav::handle_propfind))
-                .push(Router::new().filter_fn(|req, _| req.method().as_str() == "PROPPATCH").goal(handler::webdav::handle_proppatch));
+                .push(
+                    Router::new()
+                        .filter_fn(|req, _| req.method().as_str() == "PROPFIND")
+                        .goal(handler::webdav::handle_propfind),
+                )
+                .push(
+                    Router::new()
+                        .filter_fn(|req, _| req.method().as_str() == "PROPPATCH")
+                        .goal(handler::webdav::handle_proppatch),
+                );
         }
         if webdav_level >= options::WebDavLevel::MkColMoveOnly {
             r = r
-                .push(Router::new().filter_fn(|req, _| req.method().as_str() == "MKCOL").goal(handler::webdav::handle_mkcol))
-                .push(Router::new().filter_fn(|req, _| req.method().as_str() == "MOVE").goal(handler::webdav::handle_move));
+                .push(
+                    Router::new()
+                        .filter_fn(|req, _| req.method().as_str() == "MKCOL")
+                        .goal(handler::webdav::handle_mkcol),
+                )
+                .push(
+                    Router::new()
+                        .filter_fn(|req, _| req.method().as_str() == "MOVE")
+                        .goal(handler::webdav::handle_move),
+                );
         }
         if webdav_level == options::WebDavLevel::All {
-            r = r
-                .push(Router::new().filter_fn(|req, _| req.method().as_str() == "COPY").goal(handler::webdav::handle_copy));
+            r = r.push(
+                Router::new()
+                    .filter_fn(|req, _| req.method().as_str() == "COPY")
+                    .goal(handler::webdav::handle_copy),
+            );
         }
 
         r
@@ -236,8 +251,7 @@ fn build_router(config: Arc<AppConfig>) -> Router {
         router = router.hoop(DavHeaderHoop);
     }
 
-    router = router
-        .push(add_methods(Router::with_path("{**rest}"), webdav_level));
+    router = router.push(add_methods(Router::with_path("{**rest}"), webdav_level));
 
     add_methods(router, webdav_level)
 }
@@ -255,8 +269,7 @@ impl DavHeaderHoop {
         ctrl: &mut FlowCtrl,
     ) {
         ctrl.call_next(req, depot, res).await;
-        res.headers_mut()
-            .insert("DAV", "1".parse().unwrap());
+        res.headers_mut().insert("DAV", "1".parse().unwrap());
     }
 }
 
@@ -281,8 +294,7 @@ fn generate_auth_data() -> String {
     res.push(':');
     for b in 0..password_len {
         res.push(
-            PASSWORD_SET
-                [(rnd.hash_one((2u64, b as u64)) % (PASSWORD_SET.len() as u64)) as usize]
+            PASSWORD_SET[(rnd.hash_one((2u64, b as u64)) % (PASSWORD_SET.len() as u64)) as usize]
                 as char,
         );
     }

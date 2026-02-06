@@ -1,7 +1,7 @@
-use brotli::enc::backward_references::BrotliEncoderParams;
 use brotli::enc::BrotliCompress as brotli_compress;
-use flate2::write::{DeflateEncoder, GzEncoder};
+use brotli::enc::backward_references::BrotliEncoderParams;
 use flate2::Compression as Flate2Compression;
+use flate2::write::{DeflateEncoder, GzEncoder};
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Write};
 use std::path::Path;
@@ -40,10 +40,14 @@ pub fn response_encoding(accept: &str) -> Option<EncodingType> {
                 EncodingType::Deflate => 1.0,
             };
             let score = quality * 10.0 + priority;
-            if best.as_ref().map_or(true, |b| score > b.1 * 10.0 + match b.0 {
-                EncodingType::Brotli => 3.0,
-                EncodingType::Gzip => 2.0,
-                EncodingType::Deflate => 1.0,
+            if best.as_ref().map_or(true, |b| {
+                score
+                    > b.1 * 10.0
+                        + match b.0 {
+                            EncodingType::Brotli => 3.0,
+                            EncodingType::Gzip => 2.0,
+                            EncodingType::Deflate => 1.0,
+                        }
             }) {
                 best = Some((enc, quality));
             }

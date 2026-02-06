@@ -57,12 +57,7 @@ pub fn set_times_f(f: &File, mtime_ms: Option<u64>, atime_ms: Option<u64>, ctime
     }
 }
 
-pub fn set_times(
-    f: &Path,
-    mtime_ms: Option<u64>,
-    atime_ms: Option<u64>,
-    ctime_ms: Option<u64>,
-) {
+pub fn set_times(f: &Path, mtime_ms: Option<u64>, atime_ms: Option<u64>, ctime_ms: Option<u64>) {
     if mtime_ms.is_some() || atime_ms.is_some() || ctime_ms.is_some() {
         if let Ok(f) = File::options().write(true).open(f) {
             set_times_f(&f, mtime_ms, atime_ms, ctime_ms);

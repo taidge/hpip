@@ -5,14 +5,14 @@ use std::mem;
 use std::path::Path;
 use std::sync::Arc;
 
+use xml::EmitterConfig as XmlEmitterConfig;
+use xml::ParserConfig as XmlParserConfig;
 use xml::common::{Position, XmlVersion};
 use xml::name::{Name as XmlName, OwnedName as OwnedXmlName};
 use xml::reader::{EventReader as XmlReader, XmlEvent as XmlREvent};
 use xml::writer::{EventWriter as XmlWriter, XmlEvent as XmlWEvent};
-use xml::EmitterConfig as XmlEmitterConfig;
-use xml::ParserConfig as XmlParserConfig;
 
-use crate::config::{log_msg, AppConfig};
+use crate::config::{AppConfig, log_msg};
 use crate::util::webdav::*;
 use crate::util::*;
 
@@ -44,19 +44,35 @@ pub async fn handle_propfind(req: &mut Request, depot: &mut Depot, res: &mut Res
 
     let url_path_raw = req.uri().path().to_string();
     let segments: Vec<&str> = url_path_raw.split('/').filter(|s| !s.is_empty()).collect();
-    let (req_p, symlink, url_err) =
-        resolve_path(&config.hosted_directory.1, &segments, config.follow_symlinks);
+    let (req_p, symlink, url_err) = resolve_path(
+        &config.hosted_directory.1,
+        &segments,
+        config.follow_symlinks,
+    );
 
     if url_err {
-        set_error(res, StatusCode::BAD_REQUEST, "400 Bad Request", "Percent-encoding decoded to invalid UTF-8.");
+        set_error(
+            res,
+            StatusCode::BAD_REQUEST,
+            "400 Bad Request",
+            "Percent-encoding decoded to invalid UTF-8.",
+        );
         return;
     }
 
     if !req_p.exists()
         || (symlink && !config.follow_symlinks)
-        || (symlink && config.follow_symlinks && config.sandbox_symlinks && !is_descendant_of(&req_p, &config.hosted_directory.1))
+        || (symlink
+            && config.follow_symlinks
+            && config.sandbox_symlinks
+            && !is_descendant_of(&req_p, &config.hosted_directory.1))
     {
-        set_error(res, StatusCode::NOT_FOUND, "404 Not Found", &format!("The requested entity doesn't exist."));
+        set_error(
+            res,
+            StatusCode::NOT_FOUND,
+            "404 Not Found",
+            &format!("The requested entity doesn't exist."),
+        );
         return;
     }
 
@@ -67,37 +83,73 @@ pub async fn handle_propfind(req: &mut Request, depot: &mut Depot, res: &mut Res
         .and_then(Depth::parse)
         .unwrap_or(Depth::Zero);
 
-    let body_bytes = req.payload().await.ok().map(|b| b.to_vec()).unwrap_or_default();
+    let body_bytes = req
+        .payload()
+        .await
+        .ok()
+        .map(|b| b.to_vec())
+        .unwrap_or_default();
     let props = match parse_propfind(&body_bytes) {
         Ok(p) => p,
-        Err(e) => {
-            match e {
-                PropfindParseError::EmptyBody => PropfindVariant::AllProp,
-                PropfindParseError::XmlError(msg) => {
-                    let remote = req.remote_addr().to_string();
-                    log_msg(config.log, &format!("{} tried to PROPFIND {} with invalid XML", remote, req_p.display()));
-                    set_error(res, StatusCode::BAD_REQUEST, "400 Bad Request", &format!("Invalid XML: {}", msg));
-                    return;
-                }
+        Err(e) => match e {
+            PropfindParseError::EmptyBody => PropfindVariant::AllProp,
+            PropfindParseError::XmlError(msg) => {
+                let remote = req.remote_addr().to_string();
+                log_msg(
+                    config.log,
+                    &format!(
+                        "{} tried to PROPFIND {} with invalid XML",
+                        remote,
+                        req_p.display()
+                    ),
+                );
+                set_error(
+                    res,
+                    StatusCode::BAD_REQUEST,
+                    "400 Bad Request",
+                    &format!("Invalid XML: {}", msg),
+                );
+                return;
             }
-        }
+        },
     };
 
     let remote = req.remote_addr().to_string();
-    log_msg(config.log, &format!("{} requested PROPFIND of {} on {} at depth {}", remote, props, req_p.display(), depth));
+    log_msg(
+        config.log,
+        &format!(
+            "{} requested PROPFIND of {} on {} at depth {}",
+            remote,
+            props,
+            req_p.display(),
+            depth
+        ),
+    );
 
     let url = req.uri().to_string();
-    let ua = req.headers().get(salvo::http::header::USER_AGENT).and_then(|v| v.to_str().ok());
+    let ua = req
+        .headers()
+        .get(salvo::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok());
 
     match write_propfind_output(&config, &url, &req_p, &props, ua, depth) {
         Ok(xml_bytes) => {
             res.status_code(StatusCode::MULTI_STATUS);
-            res.headers_mut().insert(salvo::http::header::CONTENT_TYPE, "text/xml; charset=utf-8".parse().unwrap());
-            res.headers_mut().insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
+            res.headers_mut().insert(
+                salvo::http::header::CONTENT_TYPE,
+                "text/xml; charset=utf-8".parse().unwrap(),
+            );
+            res.headers_mut()
+                .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
             res.write_body(xml_bytes).ok();
         }
         Err(e) => {
-            set_error(res, StatusCode::INTERNAL_SERVER_ERROR, "500 Internal Server Error", &format!("XML error: {}", e));
+            set_error(
+                res,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "500 Internal Server Error",
+                &format!("XML error: {}", e),
+            );
         }
     }
 }
@@ -147,15 +199,32 @@ fn write_propfind_output(
     if meta.is_dir() {
         let mut url_owned = url.to_string();
         if let PropfindVariant::Props(custom) = variant {
-            write_propfind_recursive_custom(config, &mut out, &mut url_owned, path, custom, just_names, depth)
-                .map_err(|e| e.to_string())?;
+            write_propfind_recursive_custom(
+                config,
+                &mut out,
+                &mut url_owned,
+                path,
+                custom,
+                just_names,
+                depth,
+            )
+            .map_err(|e| e.to_string())?;
         } else {
-            write_propfind_recursive(config, &mut out, &mut url_owned, path, props, just_names, depth)
-                .map_err(|e| e.to_string())?;
+            write_propfind_recursive(
+                config,
+                &mut out,
+                &mut url_owned,
+                path,
+                props,
+                just_names,
+                depth,
+            )
+            .map_err(|e| e.to_string())?;
         }
     }
 
-    out.write(XmlWEvent::end_element()).map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::end_element())
+        .map_err(|e| e.to_string())?;
     Ok(out.into_inner())
 }
 
@@ -307,7 +376,12 @@ fn write_propfind_recursive<W: Write>(
     let mut links_left = MAX_SYMLINKS;
 
     if let Some(next_depth) = depth.lower() {
-        let entries: Vec<_> = root_path.read_dir().into_iter().flatten().flatten().collect();
+        let entries: Vec<_> = root_path
+            .read_dir()
+            .into_iter()
+            .flatten()
+            .flatten()
+            .collect();
         for f in entries {
             root_url.truncate(root_url_orig_len);
             root_url.push_str(&f.file_name().to_string_lossy());
@@ -331,15 +405,22 @@ fn write_propfind_recursive<W: Write>(
 
             if path.exists()
                 && !(symlink && !config.follow_symlinks)
-                && !(symlink && config.follow_symlinks && config.sandbox_symlinks && !is_descendant_of(&path, &config.hosted_directory.1))
+                && !(symlink
+                    && config.follow_symlinks
+                    && config.sandbox_symlinks
+                    && !is_descendant_of(&path, &config.hosted_directory.1))
             {
                 let metadata = match path.metadata() {
                     Ok(m) => m,
                     Err(_) => continue,
                 };
-                write_propfind_response(config, out, root_url, &path, &metadata, props, just_names)?;
+                write_propfind_response(
+                    config, out, root_url, &path, &metadata, props, just_names,
+                )?;
                 if metadata.is_dir() {
-                    write_propfind_recursive(config, out, root_url, &path, props, just_names, next_depth)?;
+                    write_propfind_recursive(
+                        config, out, root_url, &path, props, just_names, next_depth,
+                    )?;
                 }
             }
         }
@@ -363,7 +444,12 @@ fn write_propfind_recursive_custom<W: Write>(
     let mut links_left = MAX_SYMLINKS;
 
     if let Some(next_depth) = depth.lower() {
-        let entries: Vec<_> = root_path.read_dir().into_iter().flatten().flatten().collect();
+        let entries: Vec<_> = root_path
+            .read_dir()
+            .into_iter()
+            .flatten()
+            .flatten()
+            .collect();
         for f in entries {
             root_url.truncate(root_url_orig_len);
             root_url.push_str(&f.file_name().to_string_lossy());
@@ -387,15 +473,22 @@ fn write_propfind_recursive_custom<W: Write>(
 
             if path.exists()
                 && !(symlink && !config.follow_symlinks)
-                && !(symlink && config.follow_symlinks && config.sandbox_symlinks && !is_descendant_of(&path, &config.hosted_directory.1))
+                && !(symlink
+                    && config.follow_symlinks
+                    && config.sandbox_symlinks
+                    && !is_descendant_of(&path, &config.hosted_directory.1))
             {
                 let metadata = match path.metadata() {
                     Ok(m) => m,
                     Err(_) => continue,
                 };
-                write_propfind_response_custom(config, out, root_url, &path, &metadata, props, just_names)?;
+                write_propfind_response_custom(
+                    config, out, root_url, &path, &metadata, props, just_names,
+                )?;
                 if metadata.is_dir() {
-                    write_propfind_recursive_custom(config, out, root_url, &path, props, just_names, next_depth)?;
+                    write_propfind_recursive_custom(
+                        config, out, root_url, &path, props, just_names, next_depth,
+                    )?;
                 }
             }
         }
@@ -413,25 +506,48 @@ fn write_prop_value<W: Write>(
     if prop.namespace == Some(WEBDAV_XML_NAMESPACE_DAV.1) {
         match prop.local_name {
             "creationdate" => {
-                out.write(XmlWEvent::start_element((WEBDAV_XML_NAMESPACE_DAV.0, "creationdate")))?;
+                out.write(XmlWEvent::start_element((
+                    WEBDAV_XML_NAMESPACE_DAV.0,
+                    "creationdate",
+                )))?;
                 out.write(XmlWEvent::characters(&file_time_created(meta).to_rfc3339()))?;
             }
             "getcontentlength" => {
-                out.write(XmlWEvent::start_element((WEBDAV_XML_NAMESPACE_DAV.0, "getcontentlength")))?;
+                out.write(XmlWEvent::start_element((
+                    WEBDAV_XML_NAMESPACE_DAV.0,
+                    "getcontentlength",
+                )))?;
                 out.write(XmlWEvent::characters(&file_length(meta, &path).to_string()))?;
             }
             "getcontenttype" => {
-                out.write(XmlWEvent::start_element((WEBDAV_XML_NAMESPACE_DAV.0, "getcontenttype")))?;
-                out.write(XmlWEvent::characters(&guess_mime_type(path, &config.mime_type_overrides)))?;
+                out.write(XmlWEvent::start_element((
+                    WEBDAV_XML_NAMESPACE_DAV.0,
+                    "getcontenttype",
+                )))?;
+                out.write(XmlWEvent::characters(&guess_mime_type(
+                    path,
+                    &config.mime_type_overrides,
+                )))?;
             }
             "getlastmodified" => {
-                out.write(XmlWEvent::start_element((WEBDAV_XML_NAMESPACE_DAV.0, "getlastmodified")))?;
-                out.write(XmlWEvent::characters(&file_time_modified(meta).to_rfc3339()))?;
+                out.write(XmlWEvent::start_element((
+                    WEBDAV_XML_NAMESPACE_DAV.0,
+                    "getlastmodified",
+                )))?;
+                out.write(XmlWEvent::characters(
+                    &file_time_modified(meta).to_rfc3339(),
+                ))?;
             }
             "resourcetype" => {
-                out.write(XmlWEvent::start_element((WEBDAV_XML_NAMESPACE_DAV.0, "resourcetype")))?;
+                out.write(XmlWEvent::start_element((
+                    WEBDAV_XML_NAMESPACE_DAV.0,
+                    "resourcetype",
+                )))?;
                 if !is_actually_file(&meta.file_type(), path) {
-                    out.write(XmlWEvent::start_element((WEBDAV_XML_NAMESPACE_DAV.0, "collection")))?;
+                    out.write(XmlWEvent::start_element((
+                        WEBDAV_XML_NAMESPACE_DAV.0,
+                        "collection",
+                    )))?;
                     out.write(XmlWEvent::end_element())?;
                 }
             }
@@ -440,28 +556,54 @@ fn write_prop_value<W: Write>(
     } else if prop.namespace == Some(WEBDAV_XML_NAMESPACE_MICROSOFT.1) {
         match prop.local_name {
             "Win32CreationTime" => {
-                out.write(XmlWEvent::start_element((WEBDAV_XML_NAMESPACE_MICROSOFT.0, "Win32CreationTime")))?;
+                out.write(XmlWEvent::start_element((
+                    WEBDAV_XML_NAMESPACE_MICROSOFT.0,
+                    "Win32CreationTime",
+                )))?;
                 out.write(XmlWEvent::characters(&file_time_created(meta).to_rfc3339()))?;
             }
             "Win32FileAttributes" => {
-                out.write(XmlWEvent::start_element((WEBDAV_XML_NAMESPACE_MICROSOFT.0, "Win32FileAttributes")))?;
-                out.write(XmlWEvent::characters(&format!("{:08x}", win32_file_attributes(meta, path))))?;
+                out.write(XmlWEvent::start_element((
+                    WEBDAV_XML_NAMESPACE_MICROSOFT.0,
+                    "Win32FileAttributes",
+                )))?;
+                out.write(XmlWEvent::characters(&format!(
+                    "{:08x}",
+                    win32_file_attributes(meta, path)
+                )))?;
             }
             "Win32LastAccessTime" => {
-                out.write(XmlWEvent::start_element((WEBDAV_XML_NAMESPACE_MICROSOFT.0, "Win32LastAccessTime")))?;
-                out.write(XmlWEvent::characters(&file_time_accessed(meta).to_rfc3339()))?;
+                out.write(XmlWEvent::start_element((
+                    WEBDAV_XML_NAMESPACE_MICROSOFT.0,
+                    "Win32LastAccessTime",
+                )))?;
+                out.write(XmlWEvent::characters(
+                    &file_time_accessed(meta).to_rfc3339(),
+                ))?;
             }
             "Win32LastModifiedTime" => {
-                out.write(XmlWEvent::start_element((WEBDAV_XML_NAMESPACE_MICROSOFT.0, "Win32LastModifiedTime")))?;
-                out.write(XmlWEvent::characters(&file_time_modified(meta).to_rfc3339()))?;
+                out.write(XmlWEvent::start_element((
+                    WEBDAV_XML_NAMESPACE_MICROSOFT.0,
+                    "Win32LastModifiedTime",
+                )))?;
+                out.write(XmlWEvent::characters(
+                    &file_time_modified(meta).to_rfc3339(),
+                ))?;
             }
             _ => return Ok(false),
         }
     } else if prop.namespace == Some(WEBDAV_XML_NAMESPACE_APACHE.1) {
         match prop.local_name {
             "executable" => {
-                out.write(XmlWEvent::start_element((WEBDAV_XML_NAMESPACE_APACHE.0, "executable")))?;
-                out.write(XmlWEvent::characters(if file_executable(meta) { "T" } else { "F" }))?;
+                out.write(XmlWEvent::start_element((
+                    WEBDAV_XML_NAMESPACE_APACHE.0,
+                    "executable",
+                )))?;
+                out.write(XmlWEvent::characters(if file_executable(meta) {
+                    "T"
+                } else {
+                    "F"
+                }))?;
             }
             _ => return Ok(false),
         }
@@ -473,13 +615,32 @@ fn write_prop_value<W: Write>(
     Ok(true)
 }
 
-fn write_start_prop_element<W: Write>(out: &mut XmlWriter<W>, prop: XmlName) -> Result<(), xml::writer::Error> {
+fn write_start_prop_element<W: Write>(
+    out: &mut XmlWriter<W>,
+    prop: XmlName,
+) -> Result<(), xml::writer::Error> {
     if let Some(prop_namespace) = prop.namespace {
-        if let Some(&(prefix, _)) = WEBDAV_XML_NAMESPACES.iter().find(|(_, ns)| *ns == prop_namespace) {
-            return out.write(XmlWEvent::start_element(XmlName { prefix: Some(prefix), ..prop }));
+        if let Some(&(prefix, _)) = WEBDAV_XML_NAMESPACES
+            .iter()
+            .find(|(_, ns)| *ns == prop_namespace)
+        {
+            return out.write(XmlWEvent::start_element(XmlName {
+                prefix: Some(prefix),
+                ..prop
+            }));
         }
-        if prop.prefix.map(|pp| WEBDAV_XML_NAMESPACES.iter().any(|(pf, _)| *pf == pp)).unwrap_or(true) {
-            return out.write(XmlWEvent::start_element(XmlName { prefix: Some("U"), ..prop }).ns("U", prop_namespace));
+        if prop
+            .prefix
+            .map(|pp| WEBDAV_XML_NAMESPACES.iter().any(|(pf, _)| *pf == pp))
+            .unwrap_or(true)
+        {
+            return out.write(
+                XmlWEvent::start_element(XmlName {
+                    prefix: Some("U"),
+                    ..prop
+                })
+                .ns("U", prop_namespace),
+            );
         }
     }
     out.write(XmlWEvent::start_element(prop))
@@ -533,7 +694,12 @@ fn parse_propfind(body: &[u8]) -> Result<PropfindVariant, PropfindParseError> {
     }
 
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    enum State { Start, PropFind, Prop, InProp }
+    enum State {
+        Start,
+        PropFind,
+        Prop,
+        InProp,
+    }
 
     let mut xml = XmlReader::new_with_config(body, default_xml_parser_config());
     let mut state = State::Start;
@@ -541,7 +707,9 @@ fn parse_propfind(body: &[u8]) -> Result<PropfindVariant, PropfindParseError> {
 
     loop {
         let event = xml.next().map_err(|e| {
-            if e.position() == xml::common::TextPosition::new() && e.msg().contains("no root element") {
+            if e.position() == xml::common::TextPosition::new()
+                && e.msg().contains("no root element")
+            {
                 PropfindParseError::EmptyBody
             } else {
                 PropfindParseError::XmlError(e.to_string())
@@ -550,21 +718,44 @@ fn parse_propfind(body: &[u8]) -> Result<PropfindVariant, PropfindParseError> {
 
         match (state, event) {
             (State::Start, XmlREvent::StartDocument { .. }) => (),
-            (State::Start, XmlREvent::StartElement { ref name, .. }) if name.local_name == "propfind" => state = State::PropFind,
+            (State::Start, XmlREvent::StartElement { ref name, .. })
+                if name.local_name == "propfind" =>
+            {
+                state = State::PropFind
+            }
 
-            (State::PropFind, XmlREvent::StartElement { ref name, .. }) if name.local_name == "allprop" => return Ok(PropfindVariant::AllProp),
-            (State::PropFind, XmlREvent::StartElement { ref name, .. }) if name.local_name == "propname" => return Ok(PropfindVariant::PropName),
-            (State::PropFind, XmlREvent::StartElement { ref name, .. }) if name.local_name == "prop" => state = State::Prop,
+            (State::PropFind, XmlREvent::StartElement { ref name, .. })
+                if name.local_name == "allprop" =>
+            {
+                return Ok(PropfindVariant::AllProp);
+            }
+            (State::PropFind, XmlREvent::StartElement { ref name, .. })
+                if name.local_name == "propname" =>
+            {
+                return Ok(PropfindVariant::PropName);
+            }
+            (State::PropFind, XmlREvent::StartElement { ref name, .. })
+                if name.local_name == "prop" =>
+            {
+                state = State::Prop
+            }
 
             (State::Prop, XmlREvent::StartElement { name, .. }) => {
                 state = State::InProp;
                 props.push(name);
             }
-            (State::Prop, XmlREvent::EndElement { .. }) => return Ok(PropfindVariant::Props(props)),
+            (State::Prop, XmlREvent::EndElement { .. }) => {
+                return Ok(PropfindVariant::Props(props));
+            }
 
             (State::InProp, XmlREvent::EndElement { .. }) => state = State::Prop,
 
-            (_, ev) => return Err(PropfindParseError::XmlError(format!("Unexpected event {:?}", ev))),
+            (_, ev) => {
+                return Err(PropfindParseError::XmlError(format!(
+                    "Unexpected event {:?}",
+                    ev
+                )));
+            }
         }
     }
 }
@@ -590,41 +781,82 @@ pub async fn handle_proppatch(req: &mut Request, depot: &mut Depot, res: &mut Re
     }
 
     if config.writes_temp_dir.is_none() {
-        set_error(res, StatusCode::FORBIDDEN, "403 Forbidden", "Write requests not allowed. Use -w.");
+        set_error(
+            res,
+            StatusCode::FORBIDDEN,
+            "403 Forbidden",
+            "Write requests not allowed. Use -w.",
+        );
         return;
     }
 
     let url_path_raw = req.uri().path().to_string();
     let segments: Vec<&str> = url_path_raw.split('/').filter(|s| !s.is_empty()).collect();
-    let (req_p, symlink, url_err) =
-        resolve_path(&config.hosted_directory.1, &segments, config.follow_symlinks);
+    let (req_p, symlink, url_err) = resolve_path(
+        &config.hosted_directory.1,
+        &segments,
+        config.follow_symlinks,
+    );
 
     if url_err {
-        set_error(res, StatusCode::BAD_REQUEST, "400 Bad Request", "Percent-encoding decoded to invalid UTF-8.");
+        set_error(
+            res,
+            StatusCode::BAD_REQUEST,
+            "400 Bad Request",
+            "Percent-encoding decoded to invalid UTF-8.",
+        );
         return;
     }
 
     if !req_p.exists()
         || (symlink && !config.follow_symlinks)
-        || (symlink && config.follow_symlinks && config.sandbox_symlinks && !is_descendant_of(&req_p, &config.hosted_directory.1))
+        || (symlink
+            && config.follow_symlinks
+            && config.sandbox_symlinks
+            && !is_descendant_of(&req_p, &config.hosted_directory.1))
     {
-        set_error(res, StatusCode::NOT_FOUND, "404 Not Found", "The requested entity doesn't exist.");
+        set_error(
+            res,
+            StatusCode::NOT_FOUND,
+            "404 Not Found",
+            "The requested entity doesn't exist.",
+        );
         return;
     }
 
-    let body_bytes = req.payload().await.ok().map(|b| b.to_vec()).unwrap_or_default();
+    let body_bytes = req
+        .payload()
+        .await
+        .ok()
+        .map(|b| b.to_vec())
+        .unwrap_or_default();
     let (props, actionables) = match parse_proppatch(&body_bytes) {
         Ok(pp) => pp,
         Err(e) => {
             let remote = req.remote_addr().to_string();
-            log_msg(config.log, &format!("{} tried to PROPPATCH {} with invalid XML", remote, req_p.display()));
-            set_error(res, StatusCode::BAD_REQUEST, "400 Bad Request", &format!("Invalid XML: {}", e));
+            log_msg(
+                config.log,
+                &format!(
+                    "{} tried to PROPPATCH {} with invalid XML",
+                    remote,
+                    req_p.display()
+                ),
+            );
+            set_error(
+                res,
+                StatusCode::BAD_REQUEST,
+                "400 Bad Request",
+                &format!("Invalid XML: {}", e),
+            );
             return;
         }
     };
 
     let remote = req.remote_addr().to_string();
-    log_msg(config.log, &format!("{} requested PROPPATCH on {}", remote, req_p.display()));
+    log_msg(
+        config.log,
+        &format!("{} requested PROPPATCH on {}", remote, req_p.display()),
+    );
 
     set_times(
         &req_p,
@@ -640,19 +872,36 @@ pub async fn handle_proppatch(req: &mut Request, depot: &mut Depot, res: &mut Re
     match write_proppatch_output(&props, &url) {
         Ok(xml_bytes) => {
             res.status_code(StatusCode::MULTI_STATUS);
-            res.headers_mut().insert(salvo::http::header::CONTENT_TYPE, "text/xml; charset=utf-8".parse().unwrap());
-            res.headers_mut().insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
+            res.headers_mut().insert(
+                salvo::http::header::CONTENT_TYPE,
+                "text/xml; charset=utf-8".parse().unwrap(),
+            );
+            res.headers_mut()
+                .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
             res.write_body(xml_bytes).ok();
         }
         Err(e) => {
-            set_error(res, StatusCode::INTERNAL_SERVER_ERROR, "500 Internal Server Error", &format!("XML error: {}", e));
+            set_error(
+                res,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "500 Internal Server Error",
+                &format!("XML error: {}", e),
+            );
         }
     }
 }
 
-fn parse_proppatch(body: &[u8]) -> Result<(Vec<(OwnedXmlName, String)>, ProppatchActionables), String> {
+fn parse_proppatch(
+    body: &[u8],
+) -> Result<(Vec<(OwnedXmlName, String)>, ProppatchActionables), String> {
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    enum State { Start, PropertyUpdate, Action, Prop, InProp }
+    enum State {
+        Start,
+        PropertyUpdate,
+        Action,
+        Prop,
+        InProp,
+    }
 
     let mut xml = XmlReader::new_with_config(body, default_xml_parser_config());
     let mut state = State::Start;
@@ -667,19 +916,33 @@ fn parse_proppatch(body: &[u8]) -> Result<(Vec<(OwnedXmlName, String)>, Proppatc
 
         match (state, event) {
             (State::Start, XmlREvent::StartDocument { .. }) => (),
-            (State::Start, XmlREvent::StartElement { ref name, .. }) if name.local_name == "propertyupdate" => state = State::PropertyUpdate,
+            (State::Start, XmlREvent::StartElement { ref name, .. })
+                if name.local_name == "propertyupdate" =>
+            {
+                state = State::PropertyUpdate
+            }
 
-            (State::PropertyUpdate, XmlREvent::StartElement { ref name, .. }) if name.local_name == "set" => {
+            (State::PropertyUpdate, XmlREvent::StartElement { ref name, .. })
+                if name.local_name == "set" =>
+            {
                 state = State::Action;
                 is_remove = false;
             }
-            (State::PropertyUpdate, XmlREvent::StartElement { ref name, .. }) if name.local_name == "remove" => {
+            (State::PropertyUpdate, XmlREvent::StartElement { ref name, .. })
+                if name.local_name == "remove" =>
+            {
                 state = State::Action;
                 is_remove = true;
             }
-            (State::PropertyUpdate, XmlREvent::EndElement { .. }) => return Ok((props, actionables)),
+            (State::PropertyUpdate, XmlREvent::EndElement { .. }) => {
+                return Ok((props, actionables));
+            }
 
-            (State::Action, XmlREvent::StartElement { ref name, .. }) if name.local_name == "prop" => state = State::Prop,
+            (State::Action, XmlREvent::StartElement { ref name, .. })
+                if name.local_name == "prop" =>
+            {
+                state = State::Prop
+            }
             (State::Action, XmlREvent::EndElement { .. }) => state = State::PropertyUpdate,
 
             (State::Prop, XmlREvent::StartElement { name, .. }) => {
@@ -697,9 +960,15 @@ fn parse_proppatch(body: &[u8]) -> Result<(Vec<(OwnedXmlName, String)>, Proppatc
             (State::InProp, XmlREvent::Characters(data)) if !is_remove => {
                 propdata = data;
                 match propname.as_ref().map(|n| n.local_name.as_str()) {
-                    Some("Win32CreationTime") => actionables.Win32CreationTime = win32time(&propdata),
-                    Some("Win32LastAccessTime") => actionables.Win32LastAccessTime = win32time(&propdata),
-                    Some("Win32LastModifiedTime") => actionables.Win32LastModifiedTime = win32time(&propdata),
+                    Some("Win32CreationTime") => {
+                        actionables.Win32CreationTime = win32time(&propdata)
+                    }
+                    Some("Win32LastAccessTime") => {
+                        actionables.Win32LastAccessTime = win32time(&propdata)
+                    }
+                    Some("Win32LastModifiedTime") => {
+                        actionables.Win32LastModifiedTime = win32time(&propdata)
+                    }
                     Some("executable") => actionables.executable = Some(propdata == "T"),
                     _ => propdata.clear(),
                 }
@@ -711,7 +980,10 @@ fn parse_proppatch(body: &[u8]) -> Result<(Vec<(OwnedXmlName, String)>, Proppatc
     }
 }
 
-fn write_proppatch_output(props: &[(OwnedXmlName, String)], req_url: &str) -> Result<Vec<u8>, String> {
+fn write_proppatch_output(
+    props: &[(OwnedXmlName, String)],
+    req_url: &str,
+) -> Result<Vec<u8>, String> {
     let mut out = initialise_xml_output().map_err(|e| e.to_string())?;
 
     let mut start = XmlWEvent::start_element("D:multistatus")
@@ -721,25 +993,37 @@ fn write_proppatch_output(props: &[(OwnedXmlName, String)], req_url: &str) -> Re
     }
     out.write(start).map_err(|e| e.to_string())?;
 
-    out.write(XmlWEvent::start_element("D:href")).map_err(|e| e.to_string())?;
-    out.write(XmlWEvent::characters(req_url)).map_err(|e| e.to_string())?;
-    out.write(XmlWEvent::end_element()).map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::start_element("D:href"))
+        .map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::characters(req_url))
+        .map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::end_element())
+        .map_err(|e| e.to_string())?;
 
-    out.write(XmlWEvent::start_element("D:propstat")).map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::start_element("D:propstat"))
+        .map_err(|e| e.to_string())?;
 
     for (name, _) in props {
-        out.write(XmlWEvent::start_element("D:prop")).map_err(|e| e.to_string())?;
+        out.write(XmlWEvent::start_element("D:prop"))
+            .map_err(|e| e.to_string())?;
         write_start_prop_element(&mut out, name.borrow()).map_err(|e| e.to_string())?;
-        out.write(XmlWEvent::end_element()).map_err(|e| e.to_string())?;
-        out.write(XmlWEvent::end_element()).map_err(|e| e.to_string())?;
+        out.write(XmlWEvent::end_element())
+            .map_err(|e| e.to_string())?;
+        out.write(XmlWEvent::end_element())
+            .map_err(|e| e.to_string())?;
     }
 
-    out.write(XmlWEvent::start_element("D:status")).map_err(|e| e.to_string())?;
-    out.write(XmlWEvent::characters("HTTP/1.1 409 Conflict")).map_err(|e| e.to_string())?;
-    out.write(XmlWEvent::end_element()).map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::start_element("D:status"))
+        .map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::characters("HTTP/1.1 409 Conflict"))
+        .map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::end_element())
+        .map_err(|e| e.to_string())?;
 
-    out.write(XmlWEvent::end_element()).map_err(|e| e.to_string())?; // propstat
-    out.write(XmlWEvent::end_element()).map_err(|e| e.to_string())?; // multistatus
+    out.write(XmlWEvent::end_element())
+        .map_err(|e| e.to_string())?; // propstat
+    out.write(XmlWEvent::end_element())
+        .map_err(|e| e.to_string())?; // multistatus
 
     Ok(out.into_inner())
 }
@@ -757,32 +1041,56 @@ pub async fn handle_mkcol(req: &mut Request, depot: &mut Depot, res: &mut Respon
 
     let url_path_raw = req.uri().path().to_string();
     let segments: Vec<&str> = url_path_raw.split('/').filter(|s| !s.is_empty()).collect();
-    let (req_p, symlink, url_err) =
-        resolve_path(&config.hosted_directory.1, &segments, config.follow_symlinks);
+    let (req_p, symlink, url_err) = resolve_path(
+        &config.hosted_directory.1,
+        &segments,
+        config.follow_symlinks,
+    );
 
     let remote = req.remote_addr().to_string();
-    log_msg(config.log, &format!("{} requested to MKCOL at {}", remote, req_p.display()));
+    log_msg(
+        config.log,
+        &format!("{} requested to MKCOL at {}", remote, req_p.display()),
+    );
 
     if url_err {
-        set_error(res, StatusCode::BAD_REQUEST, "400 Bad Request", "Percent-encoding decoded to invalid UTF-8.");
+        set_error(
+            res,
+            StatusCode::BAD_REQUEST,
+            "400 Bad Request",
+            "Percent-encoding decoded to invalid UTF-8.",
+        );
         return;
     }
 
     if config.writes_temp_dir.is_none() {
-        set_error(res, StatusCode::FORBIDDEN, "403 Forbidden", "Write requests not allowed. Use -w.");
+        set_error(
+            res,
+            StatusCode::FORBIDDEN,
+            "403 Forbidden",
+            "Write requests not allowed. Use -w.",
+        );
         return;
     }
 
     if !req_p.parent().map(|pp| pp.exists()).unwrap_or(true)
         || (symlink && !config.follow_symlinks)
-        || (symlink && config.follow_symlinks && config.sandbox_symlinks && !is_descendant_of(&req_p, &config.hosted_directory.1))
+        || (symlink
+            && config.follow_symlinks
+            && config.sandbox_symlinks
+            && !is_descendant_of(&req_p, &config.hosted_directory.1))
     {
         res.status_code(StatusCode::CONFLICT);
         return;
     }
 
     // Check for non-empty body
-    let body = req.payload().await.ok().map(|b| b.to_vec()).unwrap_or_default();
+    let body = req
+        .payload()
+        .await
+        .ok()
+        .map(|b| b.to_vec())
+        .unwrap_or_default();
     if !body.is_empty() {
         res.status_code(StatusCode::UNSUPPORTED_MEDIA_TYPE);
         return;
@@ -821,15 +1129,24 @@ pub async fn handle_move(req: &mut Request, depot: &mut Depot, res: &mut Respons
     let config = depot.obtain::<Arc<AppConfig>>().unwrap().clone();
     let url_path_raw = req.uri().path().to_string();
     let segments: Vec<&str> = url_path_raw.split('/').filter(|s| !s.is_empty()).collect();
-    let (req_p, _, _) = resolve_path(&config.hosted_directory.1, &segments, config.follow_symlinks);
+    let (req_p, _, _) = resolve_path(
+        &config.hosted_directory.1,
+        &segments,
+        config.follow_symlinks,
+    );
 
     let req_p_clone = req_p.clone();
-    let is_file = req_p.metadata().map(|m| is_actually_file(&m.file_type(), &req_p)).unwrap_or(true);
+    let is_file = req_p
+        .metadata()
+        .map(|m| is_actually_file(&m.file_type(), &req_p))
+        .unwrap_or(true);
 
     handle_copy_move(req, depot, res, true).await;
 
     // If copy_move succeeded (Created or NoContent), remove source
-    if res.status_code == Some(StatusCode::CREATED) || res.status_code == Some(StatusCode::NO_CONTENT) {
+    if res.status_code == Some(StatusCode::CREATED)
+        || res.status_code == Some(StatusCode::NO_CONTENT)
+    {
         let removal = if is_file {
             fs::remove_file(&req_p_clone)
         } else {
@@ -852,19 +1169,36 @@ async fn handle_copy_move(req: &mut Request, depot: &mut Depot, res: &mut Respon
 
     let url_path_raw = req.uri().path().to_string();
     let segments: Vec<&str> = url_path_raw.split('/').filter(|s| !s.is_empty()).collect();
-    let (req_p, symlink, url_err) =
-        resolve_path(&config.hosted_directory.1, &segments, config.follow_symlinks);
+    let (req_p, symlink, url_err) = resolve_path(
+        &config.hosted_directory.1,
+        &segments,
+        config.follow_symlinks,
+    );
 
     if url_err {
-        set_error(res, StatusCode::BAD_REQUEST, "400 Bad Request", "Percent-encoding decoded to invalid UTF-8.");
+        set_error(
+            res,
+            StatusCode::BAD_REQUEST,
+            "400 Bad Request",
+            "Percent-encoding decoded to invalid UTF-8.",
+        );
         return;
     }
 
     // Parse Destination header
-    let dest_url = match req.headers().get("Destination").and_then(|v| v.to_str().ok()) {
+    let dest_url = match req
+        .headers()
+        .get("Destination")
+        .and_then(|v| v.to_str().ok())
+    {
         Some(d) => d.to_string(),
         None => {
-            set_error(res, StatusCode::BAD_REQUEST, "400 Bad Request", "Destination URL invalid or nonexistent.");
+            set_error(
+                res,
+                StatusCode::BAD_REQUEST,
+                "400 Bad Request",
+                "Destination URL invalid or nonexistent.",
+            );
             return;
         }
     };
@@ -885,42 +1219,70 @@ async fn handle_copy_move(req: &mut Request, depot: &mut Depot, res: &mut Respon
     } else if dest_url.starts_with('/') {
         dest_url.clone()
     } else {
-        set_error(res, StatusCode::BAD_REQUEST, "400 Bad Request", "Destination URL invalid.");
+        set_error(
+            res,
+            StatusCode::BAD_REQUEST,
+            "400 Bad Request",
+            "Destination URL invalid.",
+        );
         return;
     };
-    let dest_segments: Vec<&str> = dest_path_str.split('/').filter(|s: &&str| !s.is_empty()).collect();
-    let (dest_p, dest_symlink, dest_url_err) =
-        resolve_path(&config.hosted_directory.1, &dest_segments, config.follow_symlinks);
+    let dest_segments: Vec<&str> = dest_path_str
+        .split('/')
+        .filter(|s: &&str| !s.is_empty())
+        .collect();
+    let (dest_p, dest_symlink, dest_url_err) = resolve_path(
+        &config.hosted_directory.1,
+        &dest_segments,
+        config.follow_symlinks,
+    );
 
     if dest_url_err {
-        set_error(res, StatusCode::BAD_REQUEST, "400 Bad Request", "Percent-encoding decoded destination to invalid UTF-8.");
+        set_error(
+            res,
+            StatusCode::BAD_REQUEST,
+            "400 Bad Request",
+            "Percent-encoding decoded destination to invalid UTF-8.",
+        );
         return;
     }
 
-    let depth = req.headers().get("Depth")
+    let depth = req
+        .headers()
+        .get("Depth")
         .and_then(|v| v.to_str().ok())
         .and_then(Depth::parse)
         .unwrap_or(Depth::Infinity);
 
-    let overwrite = req.headers().get("Overwrite")
+    let overwrite = req
+        .headers()
+        .get("Overwrite")
         .and_then(|v| v.to_str().ok())
         .and_then(Overwrite::parse)
         .unwrap_or_default()
         .0;
 
     let remote = req.remote_addr().to_string();
-    log_msg(config.log, &format!(
-        "{} requested to {}{} {} to {} at depth {}",
-        remote,
-        if overwrite { "overwrite-" } else { "" },
-        if is_move { "MOVE" } else { "COPY" },
-        req_p.display(),
-        dest_p.display(),
-        depth
-    ));
+    log_msg(
+        config.log,
+        &format!(
+            "{} requested to {}{} {} to {} at depth {}",
+            remote,
+            if overwrite { "overwrite-" } else { "" },
+            if is_move { "MOVE" } else { "COPY" },
+            req_p.display(),
+            dest_p.display(),
+            depth
+        ),
+    );
 
     if config.writes_temp_dir.is_none() {
-        set_error(res, StatusCode::FORBIDDEN, "403 Forbidden", "Write requests not allowed. Use -w.");
+        set_error(
+            res,
+            StatusCode::FORBIDDEN,
+            "403 Forbidden",
+            "Write requests not allowed. Use -w.",
+        );
         return;
     }
 
@@ -931,15 +1293,26 @@ async fn handle_copy_move(req: &mut Request, depot: &mut Depot, res: &mut Respon
 
     if !req_p.exists()
         || (symlink && !config.follow_symlinks)
-        || (symlink && config.follow_symlinks && config.sandbox_symlinks && !is_descendant_of(&req_p, &config.hosted_directory.1))
+        || (symlink
+            && config.follow_symlinks
+            && config.sandbox_symlinks
+            && !is_descendant_of(&req_p, &config.hosted_directory.1))
     {
-        set_error(res, StatusCode::NOT_FOUND, "404 Not Found", "The requested entity doesn't exist.");
+        set_error(
+            res,
+            StatusCode::NOT_FOUND,
+            "404 Not Found",
+            "The requested entity doesn't exist.",
+        );
         return;
     }
 
     if !dest_p.parent().map(|pp| pp.exists()).unwrap_or(true)
         || (dest_symlink && !config.follow_symlinks)
-        || (dest_symlink && config.follow_symlinks && config.sandbox_symlinks && !is_descendant_of(&dest_p, &config.hosted_directory.1))
+        || (dest_symlink
+            && config.follow_symlinks
+            && config.sandbox_symlinks
+            && !is_descendant_of(&dest_p, &config.hosted_directory.1))
     {
         res.status_code(StatusCode::CONFLICT);
         return;
@@ -966,24 +1339,34 @@ async fn handle_copy_move(req: &mut Request, depot: &mut Depot, res: &mut Respon
     } else {
         match depth {
             Depth::Zero if !is_move => copy_response(res, fs::create_dir(&dest_p), overwritten),
-            Depth::Infinity => {
-                match copy_dir(&req_p, &dest_p) {
-                    Ok(errors) => {
-                        if errors.is_empty() {
-                            copy_response(res, Ok(()), overwritten);
-                        } else {
-                            res.status_code(StatusCode::MULTI_STATUS);
-                            if let Ok(xml_bytes) = copy_response_multierror(&errors, &url_path_raw) {
-                                res.headers_mut().insert(salvo::http::header::CONTENT_TYPE, "text/xml; charset=utf-8".parse().unwrap());
-                                res.write_body(xml_bytes).ok();
-                            }
+            Depth::Infinity => match copy_dir(&req_p, &dest_p) {
+                Ok(errors) => {
+                    if errors.is_empty() {
+                        copy_response(res, Ok(()), overwritten);
+                    } else {
+                        res.status_code(StatusCode::MULTI_STATUS);
+                        if let Ok(xml_bytes) = copy_response_multierror(&errors, &url_path_raw) {
+                            res.headers_mut().insert(
+                                salvo::http::header::CONTENT_TYPE,
+                                "text/xml; charset=utf-8".parse().unwrap(),
+                            );
+                            res.write_body(xml_bytes).ok();
                         }
                     }
-                    Err(_) => copy_response(res, Err(IoError::new(IoErrorKind::Other, "copy failed")), overwritten),
                 }
-            }
+                Err(_) => copy_response(
+                    res,
+                    Err(IoError::new(IoErrorKind::Other, "copy failed")),
+                    overwritten,
+                ),
+            },
             _ => {
-                set_error(res, StatusCode::BAD_REQUEST, "400 Bad Request", &format!("Invalid depth: {}", depth));
+                set_error(
+                    res,
+                    StatusCode::BAD_REQUEST,
+                    "400 Bad Request",
+                    &format!("Invalid depth: {}", depth),
+                );
             }
         }
     }
@@ -1004,24 +1387,39 @@ fn copy_response(res: &mut Response, op_result: std::io::Result<()>, overwritten
     }
 }
 
-fn copy_response_multierror(errors: &[(IoError, String)], base_url: &str) -> Result<Vec<u8>, String> {
+fn copy_response_multierror(
+    errors: &[(IoError, String)],
+    base_url: &str,
+) -> Result<Vec<u8>, String> {
     let mut out = initialise_xml_output().map_err(|e| e.to_string())?;
-    out.write(XmlWEvent::start_element("D:multistatus").ns(WEBDAV_XML_NAMESPACE_DAV.0, WEBDAV_XML_NAMESPACE_DAV.1))
+    out.write(
+        XmlWEvent::start_element("D:multistatus")
+            .ns(WEBDAV_XML_NAMESPACE_DAV.0, WEBDAV_XML_NAMESPACE_DAV.1),
+    )
+    .map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::start_element("D:response"))
         .map_err(|e| e.to_string())?;
-    out.write(XmlWEvent::start_element("D:response")).map_err(|e| e.to_string())?;
 
     for (_, subp) in errors {
-        out.write(XmlWEvent::start_element("D:href")).map_err(|e| e.to_string())?;
+        out.write(XmlWEvent::start_element("D:href"))
+            .map_err(|e| e.to_string())?;
         let href = format!("{}/{}", base_url.trim_end_matches('/'), subp);
-        out.write(XmlWEvent::characters(&href)).map_err(|e| e.to_string())?;
-        out.write(XmlWEvent::end_element()).map_err(|e| e.to_string())?;
+        out.write(XmlWEvent::characters(&href))
+            .map_err(|e| e.to_string())?;
+        out.write(XmlWEvent::end_element())
+            .map_err(|e| e.to_string())?;
     }
 
-    out.write(XmlWEvent::start_element("D:status")).map_err(|e| e.to_string())?;
-    out.write(XmlWEvent::characters("HTTP/1.1 507 Insufficient Storage")).map_err(|e| e.to_string())?;
-    out.write(XmlWEvent::end_element()).map_err(|e| e.to_string())?;
-    out.write(XmlWEvent::end_element()).map_err(|e| e.to_string())?;
-    out.write(XmlWEvent::end_element()).map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::start_element("D:status"))
+        .map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::characters("HTTP/1.1 507 Insufficient Storage"))
+        .map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::end_element())
+        .map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::end_element())
+        .map_err(|e| e.to_string())?;
+    out.write(XmlWEvent::end_element())
+        .map_err(|e| e.to_string())?;
 
     Ok(out.into_inner())
 }
@@ -1031,7 +1429,11 @@ fn copy_response_multierror(errors: &[(IoError, String)], base_url: &str) -> Res
 fn set_error(res: &mut Response, status: StatusCode, title: &str, msg: &str) {
     let body = error_html(title, msg, "");
     res.status_code(status);
-    res.headers_mut().insert(salvo::http::header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
-    res.headers_mut().insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
+    res.headers_mut().insert(
+        salvo::http::header::CONTENT_TYPE,
+        "text/html; charset=utf-8".parse().unwrap(),
+    );
+    res.headers_mut()
+        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
     res.render(Text::Html(body));
 }

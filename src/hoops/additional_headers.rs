@@ -21,8 +21,7 @@ impl AdditionalHeadersHoop {
         if let Ok(config) = depot.obtain::<Arc<AppConfig>>() {
             // Add DAV header if WebDAV is enabled
             if config.webdav >= WebDavLevel::All {
-                res.headers_mut()
-                    .insert("DAV", "1".parse().unwrap());
+                res.headers_mut().insert("DAV", "1".parse().unwrap());
             }
 
             // Add custom headers

@@ -1,4 +1,4 @@
-use libc::{futimens, timespec, utimensat, AT_FDCWD, AT_SYMLINK_NOFOLLOW, UTIME_OMIT};
+use libc::{AT_FDCWD, AT_SYMLINK_NOFOLLOW, UTIME_OMIT, futimens, timespec, utimensat};
 use std::fs::{self, File, Metadata};
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
@@ -79,12 +79,7 @@ const NO_TIMESPEC: timespec = timespec {
     tv_nsec: UTIME_OMIT,
 };
 
-pub fn set_times_f(
-    f: &File,
-    mtime_ms: Option<u64>,
-    atime_ms: Option<u64>,
-    _: Option<u64>,
-) {
+pub fn set_times_f(f: &File, mtime_ms: Option<u64>, atime_ms: Option<u64>, _: Option<u64>) {
     if mtime_ms.is_some() || atime_ms.is_some() {
         unsafe {
             futimens(
@@ -99,12 +94,7 @@ pub fn set_times_f(
     }
 }
 
-pub fn set_times(
-    f: &Path,
-    mtime_ms: Option<u64>,
-    atime_ms: Option<u64>,
-    _: Option<u64>,
-) {
+pub fn set_times(f: &Path, mtime_ms: Option<u64>, atime_ms: Option<u64>, _: Option<u64>) {
     if mtime_ms.is_some() || atime_ms.is_some() {
         unsafe {
             utimensat(

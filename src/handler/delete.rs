@@ -35,14 +35,10 @@ pub async fn handle_delete(req: &mut Request, depot: &mut Depot, res: &mut Respo
         .map(|s| s.to_string())
         .unwrap_or_default();
 
-    let segments: Vec<&str> = url_path_str
-        .split('/')
-        .filter(|s| !s.is_empty())
-        .collect();
+    let segments: Vec<&str> = url_path_str.split('/').filter(|s| !s.is_empty()).collect();
 
     // Don't follow symlinks for delete, just resolve to get the actual entry
-    let (req_p, symlink, url_err) =
-        resolve_path(&config.hosted_directory.1, &segments, false);
+    let (req_p, symlink, url_err) = resolve_path(&config.hosted_directory.1, &segments, false);
 
     if url_err {
         res.status_code(StatusCode::BAD_REQUEST);
@@ -64,10 +60,7 @@ pub async fn handle_delete(req: &mut Request, depot: &mut Depot, res: &mut Respo
         res.status_code(StatusCode::NOT_FOUND);
         res.render(Text::Html(error_html(
             "404 Not Found",
-            format!(
-                "The requested entity \"{}\" doesn't exist.",
-                url_path_str
-            ),
+            format!("The requested entity \"{}\" doesn't exist.", url_path_str),
             "",
         )));
         return;

@@ -57,13 +57,13 @@ pub fn is_symlink<P: AsRef<Path>>(p: P) -> bool {
 
 /// Check if a path is a descendant of (or equal to) another path.
 pub fn is_descendant_of<Pw: AsRef<Path>, Po: AsRef<Path>>(who: Pw, of_whom: Po) -> bool {
-    let (mut who, of_whom) =
-        if let Ok(p) = fs::canonicalize(who).and_then(|w| fs::canonicalize(of_whom).map(|o| (w, o)))
-        {
-            p
-        } else {
-            return false;
-        };
+    let (mut who, of_whom) = if let Ok(p) =
+        fs::canonicalize(who).and_then(|w| fs::canonicalize(of_whom).map(|o| (w, o)))
+    {
+        p
+    } else {
+        return false;
+    };
 
     if who == of_whom {
         return true;

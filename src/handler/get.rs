@@ -2,10 +2,10 @@ use salvo::prelude::*;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write as IoWrite};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
-use crate::config::{log_msg, AppConfig, EncodingType};
+use crate::config::{AppConfig, EncodingType, log_msg};
 use crate::encoding::compress::*;
 use crate::encoding::*;
 use crate::options::WebDavLevel;
@@ -40,13 +40,13 @@ pub async fn handle_get(req: &mut Request, depot: &mut Depot, res: &mut Response
         .map(|s| s.to_string())
         .unwrap_or_default();
 
-    let segments: Vec<&str> = url_path_str
-        .split('/')
-        .filter(|s| !s.is_empty())
-        .collect();
+    let segments: Vec<&str> = url_path_str.split('/').filter(|s| !s.is_empty()).collect();
 
-    let (mut req_p, symlink, url_err) =
-        resolve_path(&config.hosted_directory.1, &segments, config.follow_symlinks);
+    let (mut req_p, symlink, url_err) = resolve_path(
+        &config.hosted_directory.1,
+        &segments,
+        config.follow_symlinks,
+    );
 
     if url_err {
         handle_invalid_url(req, res, &config);
@@ -116,10 +116,8 @@ fn handle_invalid_url(_req: &mut Request, res: &mut Response, config: &AppConfig
         salvo::http::header::CONTENT_TYPE,
         "text/html; charset=utf-8".parse().unwrap(),
     );
-    res.headers_mut().insert(
-        salvo::http::header::SERVER,
-        USER_AGENT.parse().unwrap(),
-    );
+    res.headers_mut()
+        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
     res.render(Text::Html(body));
 }
 
@@ -151,10 +149,8 @@ fn handle_nonexistent_get(
                         salvo::http::header::CONTENT_TYPE,
                         mime_type.parse().unwrap(),
                     );
-                    res.headers_mut().insert(
-                        salvo::http::header::SERVER,
-                        USER_AGENT.parse().unwrap(),
-                    );
+                    res.headers_mut()
+                        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
                     res.write_body(data).ok();
                     return;
                 }
@@ -176,10 +172,8 @@ fn handle_nonexistent_get(
         salvo::http::header::CONTENT_TYPE,
         "text/html; charset=utf-8".parse().unwrap(),
     );
-    res.headers_mut().insert(
-        salvo::http::header::SERVER,
-        USER_AGENT.parse().unwrap(),
-    );
+    res.headers_mut()
+        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
     res.render(Text::Html(body));
 }
 
@@ -198,7 +192,11 @@ async fn handle_get_file(
         Err(e) => {
             if e.kind() == std::io::ErrorKind::PermissionDenied {
                 res.status_code(StatusCode::FORBIDDEN);
-                res.render(Text::Html(error_html("403 Forbidden", "Access denied.", "")));
+                res.render(Text::Html(error_html(
+                    "403 Forbidden",
+                    "Access denied.",
+                    "",
+                )));
             } else {
                 res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
             }
@@ -221,10 +219,8 @@ async fn handle_get_file(
                         salvo::http::header::ETAG,
                         format!("\"{}\"", etag).parse().unwrap(),
                     );
-                    res.headers_mut().insert(
-                        salvo::http::header::SERVER,
-                        USER_AGENT.parse().unwrap(),
-                    );
+                    res.headers_mut()
+                        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
                     return;
                 }
             }
@@ -239,10 +235,8 @@ async fn handle_get_file(
                             salvo::http::header::ETAG,
                             format!("\"{}\"", etag).parse().unwrap(),
                         );
-                        res.headers_mut().insert(
-                            salvo::http::header::SERVER,
-                            USER_AGENT.parse().unwrap(),
-                        );
+                        res.headers_mut()
+                            .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
                         return;
                     }
                 }
@@ -252,7 +246,12 @@ async fn handle_get_file(
 
     log_msg(
         config.log,
-        &format!("{} was served file {} as {}", remote, req_p.display(), mime_type),
+        &format!(
+            "{} was served file {} as {}",
+            remote,
+            req_p.display(),
+            mime_type
+        ),
     );
 
     // Check if we should try encoding
@@ -270,7 +269,9 @@ async fn handle_get_file(
             .and_then(|v| v.to_str().ok())
         {
             if let Some(encoding) = response_encoding(accept_enc) {
-                if let Some(encoded_data) = try_encoded_file(config, req_p, &etag, encoding, &remote) {
+                if let Some(encoded_data) =
+                    try_encoded_file(config, req_p, &etag, encoding, &remote)
+                {
                     res.status_code(if is_404 {
                         StatusCode::NOT_FOUND
                     } else {
@@ -290,16 +291,16 @@ async fn handle_get_file(
                     );
                     res.headers_mut().insert(
                         salvo::http::header::LAST_MODIFIED,
-                        modified.format("%a, %d %b %Y %T GMT").to_string().parse().unwrap(),
+                        modified
+                            .format("%a, %d %b %Y %T GMT")
+                            .to_string()
+                            .parse()
+                            .unwrap(),
                     );
-                    res.headers_mut().insert(
-                        salvo::http::header::ACCEPT_RANGES,
-                        "bytes".parse().unwrap(),
-                    );
-                    res.headers_mut().insert(
-                        salvo::http::header::SERVER,
-                        USER_AGENT.parse().unwrap(),
-                    );
+                    res.headers_mut()
+                        .insert(salvo::http::header::ACCEPT_RANGES, "bytes".parse().unwrap());
+                    res.headers_mut()
+                        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
                     res.write_body(encoded_data).ok();
                     return;
                 }
@@ -340,20 +341,20 @@ async fn handle_get_file(
     );
     res.headers_mut().insert(
         salvo::http::header::LAST_MODIFIED,
-        modified.format("%a, %d %b %Y %T GMT").to_string().parse().unwrap(),
+        modified
+            .format("%a, %d %b %Y %T GMT")
+            .to_string()
+            .parse()
+            .unwrap(),
     );
-    res.headers_mut().insert(
-        salvo::http::header::ACCEPT_RANGES,
-        "bytes".parse().unwrap(),
-    );
+    res.headers_mut()
+        .insert(salvo::http::header::ACCEPT_RANGES, "bytes".parse().unwrap());
     res.headers_mut().insert(
         salvo::http::header::CONTENT_LENGTH,
         flen.to_string().parse().unwrap(),
     );
-    res.headers_mut().insert(
-        salvo::http::header::SERVER,
-        USER_AGENT.parse().unwrap(),
-    );
+    res.headers_mut()
+        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
     res.write_body(file_data).ok();
 }
 
@@ -391,7 +392,10 @@ fn try_encoded_file(
         if let Some(((resp_p, true, _), atime)) = cache.get(&cache_key) {
             if let Ok(data) = std::fs::read(resp_p) {
                 atime.store(precise_time_ns(), AtomicOrdering::Relaxed);
-                let orig_len = req_p.metadata().map(|m| file_length(&m, req_p)).unwrap_or(0);
+                let orig_len = req_p
+                    .metadata()
+                    .map(|m| file_length(&m, req_p))
+                    .unwrap_or(0);
                 log_msg(
                     config.log,
                     &format!(
@@ -426,7 +430,10 @@ fn try_encoded_file(
     if encode_file(req_p, &resp_p, encoding) {
         let resp_meta = resp_p.metadata().ok()?;
         let resp_len = resp_meta.len();
-        let orig_len = req_p.metadata().map(|m| file_length(&m, req_p)).unwrap_or(0);
+        let orig_len = req_p
+            .metadata()
+            .map(|m| file_length(&m, req_p))
+            .unwrap_or(0);
         let gain = (orig_len as f64) / (resp_len as f64);
 
         if gain < MIN_ENCODING_GAIN || resp_len > config.encoded_filesystem_limit {
@@ -457,10 +464,7 @@ fn try_encoded_file(
             .fetch_add(resp_len, AtomicOrdering::Relaxed);
         cache.insert(
             cache_key,
-            (
-                (resp_p, true, resp_len),
-                AtomicU64::new(precise_time_ns()),
-            ),
+            ((resp_p, true, resp_len), AtomicU64::new(precise_time_ns())),
         );
 
         return Some(data);
@@ -630,16 +634,16 @@ fn handle_get_file_range(
     );
     res.headers_mut().insert(
         salvo::http::header::LAST_MODIFIED,
-        modified.format("%a, %d %b %Y %T GMT").to_string().parse().unwrap(),
+        modified
+            .format("%a, %d %b %Y %T GMT")
+            .to_string()
+            .parse()
+            .unwrap(),
     );
-    res.headers_mut().insert(
-        salvo::http::header::ACCEPT_RANGES,
-        "bytes".parse().unwrap(),
-    );
-    res.headers_mut().insert(
-        salvo::http::header::SERVER,
-        USER_AGENT.parse().unwrap(),
-    );
+    res.headers_mut()
+        .insert(salvo::http::header::ACCEPT_RANGES, "bytes".parse().unwrap());
+    res.headers_mut()
+        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
     res.write_body(buf).ok();
 }
 
@@ -698,10 +702,8 @@ fn handle_get_dir(
                                         .unwrap(),
                                 );
                             }
-                            res.headers_mut().insert(
-                                salvo::http::header::SERVER,
-                                USER_AGENT.parse().unwrap(),
-                            );
+                            res.headers_mut()
+                                .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
                             res.write_body(data).ok();
                             return;
                         }
@@ -712,17 +714,16 @@ fn handle_get_dir(
                     let new_url = format!("{}/", url_path_raw);
                     log_msg(
                         config.log,
-                        &format!("Redirecting to {} - found index file index.{}", new_url, ext),
+                        &format!(
+                            "Redirecting to {} - found index file index.{}",
+                            new_url, ext
+                        ),
                     );
                     res.status_code(StatusCode::SEE_OTHER);
-                    res.headers_mut().insert(
-                        salvo::http::header::LOCATION,
-                        new_url.parse().unwrap(),
-                    );
-                    res.headers_mut().insert(
-                        salvo::http::header::SERVER,
-                        USER_AGENT.parse().unwrap(),
-                    );
+                    res.headers_mut()
+                        .insert(salvo::http::header::LOCATION, new_url.parse().unwrap());
+                    res.headers_mut()
+                        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
                     return;
                 }
             }
@@ -830,15 +831,23 @@ fn handle_dir_listing(
 
         list.sort_by(|lhs, rhs| {
             let lhs_is_file = is_actually_file(
-                &lhs.file_type().unwrap_or(lhs.metadata().unwrap().file_type()),
+                &lhs.file_type()
+                    .unwrap_or(lhs.metadata().unwrap().file_type()),
                 &lhs.path(),
             );
             let rhs_is_file = is_actually_file(
-                &rhs.file_type().unwrap_or(rhs.metadata().unwrap().file_type()),
+                &rhs.file_type()
+                    .unwrap_or(rhs.metadata().unwrap().file_type()),
                 &rhs.path(),
             );
-            (lhs_is_file, lhs.file_name().to_string_lossy().to_lowercase())
-                .cmp(&(rhs_is_file, rhs.file_name().to_string_lossy().to_lowercase()))
+            (
+                lhs_is_file,
+                lhs.file_name().to_string_lossy().to_lowercase(),
+            )
+                .cmp(&(
+                    rhs_is_file,
+                    rhs.file_name().to_string_lossy().to_lowercase(),
+                ))
         });
 
         for f in list {
@@ -856,13 +865,19 @@ fn handle_dir_listing(
             let modified = file_time_modified(&fmeta);
 
             let size_display = if is_file {
-                format!("<abbr title=\"{} B\">{}</abbr>", len, HumanReadableSize(len))
+                format!(
+                    "<abbr title=\"{} B\">{}</abbr>",
+                    len,
+                    HumanReadableSize(len)
+                )
             } else {
                 "&nbsp;".to_string()
             };
 
             let manage_col = if show_file_management_controls {
-                let mut s = String::from("<td><a href class=\"delete_file_icon\" onclick=\"delete_onclick(arguments[0])\">Delete</a>");
+                let mut s = String::from(
+                    "<td><a href class=\"delete_file_icon\" onclick=\"delete_onclick(arguments[0])\">Delete</a>",
+                );
                 if config.webdav >= WebDavLevel::MkColMoveOnly {
                     s.push_str(" <a href class=\"rename_icon\" onclick=\"rename_onclick(arguments[0])\">Rename</a>");
                 }
@@ -880,16 +895,20 @@ fn handle_dir_listing(
                  href=\"{}{}\">{}{}</a></td> <td><a href=\"{}{}\" tabindex=\"-1\"><time ms={}>{}</time></a></td> \
                  <td><a href=\"{}{}\" tabindex=\"-1\">{}</a></td> {}</tr>\n",
                 NoDoubleQuotes(&fname),
-                relpath_escaped, escaped_fname,
+                relpath_escaped,
+                escaped_fname,
                 if is_file { "file" } else { "dir" },
                 file_icon_suffix(&path, is_file),
-                relpath_escaped, escaped_fname,
+                relpath_escaped,
+                escaped_fname,
                 NoHtmlLiteral(&fname),
                 if is_file { "" } else { "/" },
-                relpath_escaped, escaped_fname,
+                relpath_escaped,
+                escaped_fname,
                 modified.timestamp_millis(),
                 modified.format("%F %T"),
-                relpath_escaped, escaped_fname,
+                relpath_escaped,
+                escaped_fname,
                 size_display,
                 manage_col,
             );
@@ -961,10 +980,8 @@ fn handle_dir_listing(
         salvo::http::header::CONTENT_TYPE,
         "text/html; charset=utf-8".parse().unwrap(),
     );
-    res.headers_mut().insert(
-        salvo::http::header::SERVER,
-        USER_AGENT.parse().unwrap(),
-    );
+    res.headers_mut()
+        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
 
     if let Some((enc_data, enc_type)) = encoded_body {
         res.headers_mut().insert(
@@ -1047,8 +1064,14 @@ fn handle_mobile_dir_listing(
                 .metadata()
                 .map(|m| is_actually_file(&m.file_type(), &rhs.path()))
                 .unwrap_or(false);
-            (lhs_is_file, lhs.file_name().to_string_lossy().to_lowercase())
-                .cmp(&(rhs_is_file, rhs.file_name().to_string_lossy().to_lowercase()))
+            (
+                lhs_is_file,
+                lhs.file_name().to_string_lossy().to_lowercase(),
+            )
+                .cmp(&(
+                    rhs_is_file,
+                    rhs.file_name().to_string_lossy().to_lowercase(),
+                ))
         });
 
         for f in list {
@@ -1172,10 +1195,8 @@ fn handle_mobile_dir_listing(
         salvo::http::header::CONTENT_TYPE,
         "text/html; charset=utf-8".parse().unwrap(),
     );
-    res.headers_mut().insert(
-        salvo::http::header::SERVER,
-        USER_AGENT.parse().unwrap(),
-    );
+    res.headers_mut()
+        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
 
     if let Some((enc_data, enc_type)) = encoded_body {
         res.headers_mut().insert(

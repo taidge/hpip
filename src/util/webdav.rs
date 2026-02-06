@@ -148,11 +148,7 @@ pub fn copy_dir(from: &Path, to: &Path) -> IoResult<Vec<(IoError, String)>> {
     }
 
     let mut errors = Vec::new();
-    for entry in WalkDir::new(from)
-        .min_depth(1)
-        .into_iter()
-        .flatten()
-    {
+    for entry in WalkDir::new(from).min_depth(1).into_iter().flatten() {
         let source_metadata = match entry.metadata() {
             Ok(md) => md,
             Err(err) => {

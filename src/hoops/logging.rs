@@ -1,7 +1,7 @@
 use salvo::prelude::*;
 use std::sync::Arc;
 
-use crate::config::{log_msg, AppConfig};
+use crate::config::{AppConfig, log_msg};
 
 /// Request logging hoop (logs method and URL for every request).
 pub struct LoggingHoop;

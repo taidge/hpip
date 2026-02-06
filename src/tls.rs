@@ -7,7 +7,9 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 
 /// Generate a passwordless self-signed certificate in the `"tls"` subdirectory
 /// of the specified directory.
-pub fn generate_tls_data(temp_dir: &(String, PathBuf)) -> Result<((String, PathBuf), String), Error> {
+pub fn generate_tls_data(
+    temp_dir: &(String, PathBuf),
+) -> Result<((String, PathBuf), String), Error> {
     fn err<M: fmt::Display>(which: bool, op: &'static str, more: M) -> Error {
         Error(format!(
             "{} {}: {}",
@@ -94,8 +96,17 @@ pub fn generate_tls_data(temp_dir: &(String, PathBuf)) -> Result<((String, PathB
     // Convert to PKCS12
     let mut child = Command::new("openssl")
         .args([
-            "pkcs12", "-export", "-out", "tls.p12", "-inkey", "tls.key", "-in", "tls.crt",
-            "-passin", "pass:", "-passout",
+            "pkcs12",
+            "-export",
+            "-out",
+            "tls.p12",
+            "-inkey",
+            "tls.key",
+            "-in",
+            "tls.crt",
+            "-passin",
+            "pass:",
+            "-passout",
             if cfg!(target_os = "macos") {
                 "pass:password"
             } else {
@@ -109,9 +120,7 @@ pub fn generate_tls_data(temp_dir: &(String, PathBuf)) -> Result<((String, PathB
         .spawn()
         .map_err(|error| err(false, "Spawning", error))?;
 
-    let es = child
-        .wait()
-        .map_err(|error| err(false, "Waiting", error))?;
+    let es = child.wait().map_err(|error| err(false, "Waiting", error))?;
     if !es.success() {
         return Err(exit_err(false, &mut child, &es));
     }

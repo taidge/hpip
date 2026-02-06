@@ -5,8 +5,8 @@ use std::ffi::OsString;
 use std::fs;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 use cidr::IpCidr;
 
@@ -77,11 +77,10 @@ impl AppConfig {
             }
         }
 
-        let mut allowed_methods =
-            vec!["OPTIONS", "GET", "HEAD", "TRACE"]
-                .into_iter()
-                .map(String::from)
-                .collect::<Vec<_>>();
+        let mut allowed_methods = vec!["OPTIONS", "GET", "HEAD", "TRACE"]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>();
 
         if opts.allow_writes {
             allowed_methods.push("PUT".into());
@@ -161,10 +160,7 @@ impl AppConfig {
         if let Some((temp_name, temp_dir)) = td {
             if !temp_dir.exists() {
                 if fs::create_dir_all(temp_dir).is_ok() {
-                    log_msg(
-                        self.log,
-                        &format!("Created temp dir {}", temp_name),
-                    );
+                    log_msg(self.log, &format!("Created temp dir {}", temp_name));
                 }
             }
         }
@@ -181,17 +177,11 @@ impl AppConfig {
         .flatten()
         {
             if fs::remove_dir_all(temp_dir).is_ok() {
-                log_msg(
-                    self.log,
-                    &format!("Deleted temp dir {}", temp_name),
-                );
+                log_msg(self.log, &format!("Deleted temp dir {}", temp_name));
             }
         }
         if fs::remove_dir(&temp_directory.1).is_ok() {
-            log_msg(
-                self.log,
-                &format!("Deleted temp dir {}", temp_directory.0),
-            );
+            log_msg(self.log, &format!("Deleted temp dir {}", temp_directory.0));
         }
     }
 
@@ -368,11 +358,7 @@ pub fn log_msg(log: (bool, bool, bool), msg: &str) {
             if log.1 {
                 print!(
                     "{} ",
-                    format!(
-                        "[{}]",
-                        chrono::Local::now().format("%F %T")
-                    )
-                    .cyan()
+                    format!("[{}]", chrono::Local::now().format("%F %T")).cyan()
                 );
             }
             println!("{}", msg);

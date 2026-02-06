@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
-use crate::config::{log_msg, AppConfig};
+use crate::config::{AppConfig, log_msg};
 use crate::util::*;
 
 /// Raw filesystem metadata for a single file/directory
@@ -65,8 +65,11 @@ pub async fn handle_rfsapi(req: &mut Request, depot: &mut Depot, res: &mut Respo
 pub async fn handle_rfsapi_inner(req: &mut Request, res: &mut Response, config: &AppConfig) {
     let url_path_raw = req.uri().path().to_string();
     let segments: Vec<&str> = url_path_raw.split('/').filter(|s| !s.is_empty()).collect();
-    let (req_p, symlink, url_err) =
-        resolve_path(&config.hosted_directory.1, &segments, config.follow_symlinks);
+    let (req_p, symlink, url_err) = resolve_path(
+        &config.hosted_directory.1,
+        &segments,
+        config.follow_symlinks,
+    );
 
     if url_err {
         res.status_code(StatusCode::BAD_REQUEST);
@@ -118,7 +121,11 @@ fn handle_get_raw_fs_file(
 ) {
     log_msg(
         config.log,
-        &format!("{} was served metadata for file {}", remote, req_p.display()),
+        &format!(
+            "{} was served metadata for file {}",
+            remote,
+            req_p.display()
+        ),
     );
 
     let data = FilesetData {
@@ -133,10 +140,8 @@ fn handle_get_raw_fs_file(
         salvo::http::header::CONTENT_TYPE,
         "application/json".parse().unwrap(),
     );
-    res.headers_mut().insert(
-        salvo::http::header::SERVER,
-        USER_AGENT.parse().unwrap(),
-    );
+    res.headers_mut()
+        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
     res.render(Text::Json(serde_json::to_string(&data).unwrap_or_default()));
 }
 
@@ -157,10 +162,7 @@ fn handle_get_raw_fs_dir(
         ),
     );
 
-    let segment_count = url_path_raw
-        .split('/')
-        .filter(|s| !s.is_empty())
-        .count();
+    let segment_count = url_path_raw.split('/').filter(|s| !s.is_empty()).count();
     let is_root = segment_count + !url_path_raw.ends_with('/') as usize == 1
         || url_path_raw == "/"
         || url_path_raw.is_empty();
@@ -211,10 +213,8 @@ fn handle_get_raw_fs_dir(
         salvo::http::header::CONTENT_TYPE,
         "application/json".parse().unwrap(),
     );
-    res.headers_mut().insert(
-        salvo::http::header::SERVER,
-        USER_AGENT.parse().unwrap(),
-    );
+    res.headers_mut()
+        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
     res.render(Text::Json(serde_json::to_string(&data).unwrap_or_default()));
 }
 

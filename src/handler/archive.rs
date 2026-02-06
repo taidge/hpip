@@ -14,11 +14,11 @@ use tar::Builder as TarBuilder;
 #[cfg(unix)]
 use tar::{EntryType as TarEntryType, Header as TarHeader};
 use walkdir::WalkDir;
-use zip::write::{FullFileOptions as ZipFileOptions, ZipWriter};
 use zip::CompressionMethod as ZipCompressionMethod;
+use zip::write::{FullFileOptions as ZipFileOptions, ZipWriter};
 
-use crate::config::{log_msg, AppConfig};
-use crate::encoding::{extension_is_blacklisted, MAX_ENCODING_SIZE, MIN_ENCODING_SIZE};
+use crate::config::{AppConfig, log_msg};
+use crate::encoding::{MAX_ENCODING_SIZE, MIN_ENCODING_SIZE, extension_is_blacklisted};
 use crate::util::*;
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -105,7 +105,12 @@ pub async fn handle_post_archive(req: &mut Request, depot: &mut Depot, res: &mut
         return;
     }
 
-    let body_bytes = req.payload().await.ok().map(|b| b.to_vec()).unwrap_or_default();
+    let body_bytes = req
+        .payload()
+        .await
+        .ok()
+        .map(|b| b.to_vec())
+        .unwrap_or_default();
     let body_str = str::from_utf8(&body_bytes).unwrap_or("");
 
     let mut archive_type: Option<ArchiveType> = None;
@@ -151,15 +156,23 @@ pub fn try_get_accept_archive(req: &Request) -> Option<ArchiveType> {
 }
 
 /// Serve an archive from a GET request with Accept header
-pub fn serve_archive_from_get(req: &Request, res: &mut Response, config: &AppConfig, archive_type: ArchiveType) {
+pub fn serve_archive_from_get(
+    req: &Request,
+    res: &mut Response,
+    config: &AppConfig,
+    archive_type: ArchiveType,
+) {
     serve_archive(req, res, config, archive_type);
 }
 
 fn serve_archive(req: &Request, res: &mut Response, config: &AppConfig, archive_type: ArchiveType) {
     let url_path_raw = req.uri().path().to_string();
     let segments: Vec<&str> = url_path_raw.split('/').filter(|s| !s.is_empty()).collect();
-    let (req_p, symlink, url_err) =
-        resolve_path(&config.hosted_directory.1, &segments, config.follow_symlinks);
+    let (req_p, symlink, url_err) = resolve_path(
+        &config.hosted_directory.1,
+        &segments,
+        config.follow_symlinks,
+    );
 
     if url_err {
         res.status_code(StatusCode::BAD_REQUEST);
@@ -199,7 +212,12 @@ fn serve_archive(req: &Request, res: &mut Response, config: &AppConfig, archive_
 
     log_msg(
         config.log,
-        &format!("{} is served {} archive for {}", remote, archive_type, req_p.display()),
+        &format!(
+            "{} is served {} archive for {}",
+            remote,
+            archive_type,
+            req_p.display()
+        ),
     );
 
     let allow_encoding = config.encoded_temp_dir.is_some();
@@ -214,7 +232,12 @@ fn serve_archive(req: &Request, res: &mut Response, config: &AppConfig, archive_
         Ok(data) => {
             log_msg(
                 config.log,
-                &format!("{} was served {} archive for {}", remote, archive_type, req_p.display()),
+                &format!(
+                    "{} was served {} archive for {}",
+                    remote,
+                    archive_type,
+                    req_p.display()
+                ),
             );
             res.status_code(StatusCode::OK);
             res.headers_mut().insert(
@@ -223,12 +246,12 @@ fn serve_archive(req: &Request, res: &mut Response, config: &AppConfig, archive_
             );
             res.headers_mut().insert(
                 salvo::http::header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{}\"", attachment).parse().unwrap(),
+                format!("attachment; filename=\"{}\"", attachment)
+                    .parse()
+                    .unwrap(),
             );
-            res.headers_mut().insert(
-                salvo::http::header::SERVER,
-                USER_AGENT.parse().unwrap(),
-            );
+            res.headers_mut()
+                .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
             res.write_body(data).ok();
         }
         Err(e) => {

@@ -1,7 +1,7 @@
 use salvo::prelude::*;
 use std::sync::Arc;
 
-use crate::config::{log_msg, AppConfig};
+use crate::config::{AppConfig, log_msg};
 use crate::util::USER_AGENT;
 
 /// Check authentication. Returns Some(Response) if auth fails, None if auth passes.
@@ -45,16 +45,18 @@ pub fn check_auth(req: &Request, config: &Arc<AppConfig>) -> Option<Response> {
     if let Some(auth_header) = req.headers().get(salvo::http::header::AUTHORIZATION) {
         if let Ok(auth_str) = auth_header.to_str() {
             if auth_str.starts_with("Basic ") {
-                if let Ok(decoded) =
-                    base64_decode(&auth_str[6..])
-                {
+                if let Ok(decoded) = base64_decode(&auth_str[6..]) {
                     if let Ok(cred_str) = String::from_utf8(decoded) {
                         let (username, password) = if let Some(pos) = cred_str.find(':') {
                             let u = &cred_str[..pos];
                             let p = &cred_str[pos + 1..];
                             (
                                 u.to_string(),
-                                if p.is_empty() { None } else { Some(p.to_string()) },
+                                if p.is_empty() {
+                                    None
+                                } else {
+                                    Some(p.to_string())
+                                },
                             )
                         } else {
                             (cred_str.clone(), None)
@@ -63,10 +65,7 @@ pub fn check_auth(req: &Request, config: &Arc<AppConfig>) -> Option<Response> {
                         if auth.0 == username && auth.1 == password {
                             log_msg(
                                 config.log,
-                                &format!(
-                                    "{} correctly authorised to {} {}",
-                                    remote, method, url
-                                ),
+                                &format!("{} correctly authorised to {} {}", remote, method, url),
                             );
                             return None;
                         } else {
@@ -83,10 +82,8 @@ pub fn check_auth(req: &Request, config: &Arc<AppConfig>) -> Option<Response> {
                                 "WWW-Authenticate",
                                 "Basic realm=\"hpip\"".parse().unwrap(),
                             );
-                            resp.headers_mut().insert(
-                                salvo::http::header::SERVER,
-                                USER_AGENT.parse().unwrap(),
-                            );
+                            resp.headers_mut()
+                                .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
                             resp.render(Text::Plain("Supplied credentials invalid.\n"));
                             return Some(resp);
                         }
@@ -106,14 +103,10 @@ pub fn check_auth(req: &Request, config: &Arc<AppConfig>) -> Option<Response> {
 
     let mut resp = Response::new();
     resp.status_code(StatusCode::UNAUTHORIZED);
-    resp.headers_mut().insert(
-        "WWW-Authenticate",
-        "Basic realm=\"hpip\"".parse().unwrap(),
-    );
-    resp.headers_mut().insert(
-        salvo::http::header::SERVER,
-        USER_AGENT.parse().unwrap(),
-    );
+    resp.headers_mut()
+        .insert("WWW-Authenticate", "Basic realm=\"hpip\"".parse().unwrap());
+    resp.headers_mut()
+        .insert(salvo::http::header::SERVER, USER_AGENT.parse().unwrap());
     resp.render(Text::Plain("Credentials required.\n"));
     Some(resp)
 }

@@ -1,9 +1,9 @@
-pub mod get;
-pub mod put;
+pub mod archive;
 pub mod delete;
-pub mod options_handler;
+pub mod get;
 pub mod head;
+pub mod options_handler;
+pub mod put;
+pub mod rfsapi;
 pub mod trace;
 pub mod webdav;
-pub mod archive;
-pub mod rfsapi;

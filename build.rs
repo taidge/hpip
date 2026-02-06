@@ -198,9 +198,7 @@ fn extensions() {
         .map(str::trim)
         .filter(|s| !s.is_empty() && !s.starts_with('#'))
     {
-        exts.entry(ext.len())
-            .or_insert(BTreeSet::new())
-            .insert(ext);
+        exts.entry(ext.len()).or_insert(BTreeSet::new()).insert(ext);
     }
     writeln!(
         out,

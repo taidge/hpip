@@ -1,8 +1,8 @@
 use crate::error::Error;
 use blake3;
 use clap::Parser;
-use std::collections::btree_map::{BTreeMap, Entry as BTreeMapEntry};
 use std::collections::BTreeSet;
+use std::collections::btree_map::{BTreeMap, Entry as BTreeMapEntry};
 use std::env;
 use std::ffi::OsString;
 use std::net::IpAddr;
@@ -232,7 +232,10 @@ impl Options {
         let mut path_auth_data = BTreeMap::new();
         if let Some(ref root_auth) = cli.auth {
             Options::validate_credentials(root_auth)?;
-            path_auth_data.insert(String::new(), Some(Options::normalise_credentials(root_auth)));
+            path_auth_data.insert(
+                String::new(),
+                Some(Options::normalise_credentials(root_auth)),
+            );
         }
 
         for pa in &cli.path_auth {
@@ -318,8 +321,9 @@ impl Options {
                 let (temp_s, temp_pb) = if let Some(ref tmpdir) = cli.temp_dir {
                     (
                         tmpdir.to_string(),
-                        std::fs::canonicalize(tmpdir)
-                            .map_err(|_| Error(format!("Temporary directory \"{}\" not found", tmpdir)))?,
+                        std::fs::canonicalize(tmpdir).map_err(|_| {
+                            Error(format!("Temporary directory \"{}\" not found", tmpdir))
+                        })?,
                     )
                 } else {
                     ("$TEMP".to_string(), env::temp_dir())
@@ -381,10 +385,7 @@ impl Options {
             archives: cli.archives,
             tls_data: cli.ssl.map(|id| {
                 let id_pb = std::fs::canonicalize(&id).expect("TLS identity file not found");
-                (
-                    (id, id_pb),
-                    env::var("HTTP_SSL_PASS").unwrap_or_default(),
-                )
+                ((id, id_pb), env::var("HTTP_SSL_PASS").unwrap_or_default())
             }),
             generate_tls: cli.gen_ssl,
             path_auth_data,
@@ -548,21 +549,16 @@ impl Options {
             }
         };
 
-        let number = u64::from_str(s)
-            .map_err(|e| Error(format!("\"{}\" not bandwidth size: {}", s, e)))?;
-        Ok(NonZeroU64::new(
-            number
-                .checked_mul(multiplier)
-                .ok_or_else(|| Error(format!("{} * {} too big", number, multiplier)))?,
-        ))
+        let number =
+            u64::from_str(s).map_err(|e| Error(format!("\"{}\" not bandwidth size: {}", s, e)))?;
+        Ok(NonZeroU64::new(number.checked_mul(multiplier).ok_or_else(
+            || Error(format!("{} * {} too big", number, multiplier)),
+        )?))
     }
 
     fn mime_type_override_parse(s: &str) -> Result<(OsString, String), Error> {
         match s.find(':') {
-            None => Err(Error(format!(
-                "{} not in EXTENSION:MIME-TYPE format",
-                s
-            ))),
+            None => Err(Error(format!("{} not in EXTENSION:MIME-TYPE format", s))),
             Some(col_idx) => {
                 let mime_s = &s[col_idx + 1..];
                 // Basic MIME type validation

@@ -23,8 +23,7 @@ impl fmt::Display for HumanReadableSize {
                 } else {
                     val.round()
                 },
-                ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"]
-                    [exp.max(0) as usize]
+                ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"][exp.max(0) as usize]
             )
         }
     }
