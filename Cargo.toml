@@ -1,11 +1,11 @@
 [package]
 name = "hpip"
 description = "Host These Things Please - a modern async HTTP file server"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/taidge/hpip"
-homepage = "https://github.com/taidge/hpip"
+repository = "https://github.com/salvo-rs/hpip"
+homepage = "https://github.com/salvo-rs/hpip"
 build = "build.rs"
 
 [dependencies]
@@ -20,7 +20,7 @@ chrono = "0.4"
 mime_guess = "2"
 mime = "0.3"
 percent-encoding = "2"
-xml-rs = "0.8"
+xml-rs = "1"
 tar = "0.4"
 walkdir = "2"
 cidr = { version = "0.3", default-features = false }
@@ -35,7 +35,10 @@ default-features = false
 features = ["deflate-flate2"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
+windows-sys = { version = "0.61", features = [
+    "Win32_Storage_FileSystem",
+    "Win32_Foundation",
+] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 libc = "0.2"

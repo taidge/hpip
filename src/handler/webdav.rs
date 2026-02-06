@@ -16,18 +16,16 @@ use crate::util::webdav::*;
 use crate::util::*;
 
 fn default_xml_parser_config() -> XmlParserConfig {
-    XmlParserConfig {
-        trim_whitespace: true,
-        whitespace_to_characters: true,
-        ..Default::default()
-    }
+    let mut config = XmlParserConfig::new();
+    config.trim_whitespace = true;
+    config.whitespace_to_characters = true;
+    config
 }
 
 fn default_xml_emitter_config() -> XmlEmitterConfig {
-    XmlEmitterConfig {
-        perform_indent: cfg!(debug_assertions),
-        ..Default::default()
-    }
+    let mut config = XmlEmitterConfig::new();
+    config.perform_indent = cfg!(debug_assertions);
+    config
 }
 
 // ─── PROPFIND ──────────────────────────────────────────
