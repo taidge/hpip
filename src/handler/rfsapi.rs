@@ -53,7 +53,7 @@ fn get_raw_fs_metadata(path: &std::path::Path) -> RawFileData {
 pub async fn handle_rfsapi(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let config = depot.obtain::<Arc<AppConfig>>().unwrap().clone();
 
-    if let Some(resp) = crate::middleware::auth::check_auth(req, &config) {
+    if let Some(resp) = crate::hoops::auth::check_auth(req, &config) {
         *res = resp;
         return;
     }

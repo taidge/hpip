@@ -4,11 +4,11 @@ use std::sync::Arc;
 use crate::config::AppConfig;
 use crate::options::WebDavLevel;
 
-/// Middleware that adds custom headers and DAV header to every response.
-pub struct AdditionalHeadersMiddleware;
+/// Hoop that adds custom headers and DAV header to every response.
+pub struct AdditionalHeadersHoop;
 
 #[handler]
-impl AdditionalHeadersMiddleware {
+impl AdditionalHeadersHoop {
     async fn handle(
         &self,
         req: &mut Request,

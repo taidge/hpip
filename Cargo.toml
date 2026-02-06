@@ -2,11 +2,11 @@
 name = "hpip"
 description = "Host These Things Please - a modern async HTTP file server"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 build = "build.rs"
 
 [dependencies]
-salvo = { version = "0.76", features = ["rustls"] }
+salvo = { version = "0.89", features = ["rustls"] }
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
@@ -20,19 +20,19 @@ percent-encoding = "2"
 xml-rs = "0.8"
 tar = "0.4"
 walkdir = "2"
-cidr = { version = "0.1", default-features = false }
-colored = "2"
+cidr = { version = "0.3", default-features = false }
+colored = "3"
 
 [dependencies.brotli]
 version = "8"
 
 [dependencies.zip]
-version = "5"
+version = "7"
 default-features = false
 features = ["deflate-flate2"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 libc = "0.2"

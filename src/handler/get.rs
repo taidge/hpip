@@ -15,7 +15,7 @@ use crate::util::*;
 pub async fn handle_get(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let config = depot.obtain::<Arc<AppConfig>>().unwrap().clone();
 
-    if let Some(resp) = crate::middleware::auth::check_auth(req, &config) {
+    if let Some(resp) = crate::hoops::auth::check_auth(req, &config) {
         *res = resp;
         return;
     }
@@ -388,7 +388,7 @@ fn try_encoded_file(
     // Check fs cache
     {
         let cache = config.cache_fs.read().ok()?;
-        if let Some(((ref resp_p, true, _), ref atime)) = cache.get(&cache_key) {
+        if let Some(((resp_p, true, _), atime)) = cache.get(&cache_key) {
             if let Ok(data) = std::fs::read(resp_p) {
                 atime.store(precise_time_ns(), AtomicOrdering::Relaxed);
                 let orig_len = req_p.metadata().map(|m| file_length(&m, req_p)).unwrap_or(0);
@@ -1205,7 +1205,7 @@ fn try_encode_generated_response(
     // Check gen cache
     {
         if let Ok(cache) = config.cache_gen.read() {
-            if let Some((ref enc_resp, ref atime)) = cache.get(&cache_key) {
+            if let Some((enc_resp, atime)) = cache.get(&cache_key) {
                 atime.store(precise_time_ns(), AtomicOrdering::Relaxed);
                 return Some((enc_resp.clone(), encoding));
             }

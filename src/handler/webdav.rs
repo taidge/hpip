@@ -37,7 +37,7 @@ fn default_xml_emitter_config() -> XmlEmitterConfig {
 pub async fn handle_propfind(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let config = depot.obtain::<Arc<AppConfig>>().unwrap().clone();
 
-    if let Some(resp) = crate::middleware::auth::check_auth(req, &config) {
+    if let Some(resp) = crate::hoops::auth::check_auth(req, &config) {
         *res = resp;
         return;
     }
@@ -136,7 +136,7 @@ fn write_propfind_output(
 
     let meta = path.metadata().map_err(|e| e.to_string())?;
 
-    if let PropfindVariant::Props(ref custom) = variant {
+    if let PropfindVariant::Props(custom) = variant {
         write_propfind_response_custom(&config, &mut out, url, path, &meta, custom, just_names)
             .map_err(|e| e.to_string())?;
     } else {
@@ -146,7 +146,7 @@ fn write_propfind_output(
 
     if meta.is_dir() {
         let mut url_owned = url.to_string();
-        if let PropfindVariant::Props(ref custom) = variant {
+        if let PropfindVariant::Props(custom) = variant {
             write_propfind_recursive_custom(config, &mut out, &mut url_owned, path, custom, just_names, depth)
                 .map_err(|e| e.to_string())?;
         } else {
@@ -584,7 +584,7 @@ struct ProppatchActionables {
 pub async fn handle_proppatch(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let config = depot.obtain::<Arc<AppConfig>>().unwrap().clone();
 
-    if let Some(resp) = crate::middleware::auth::check_auth(req, &config) {
+    if let Some(resp) = crate::hoops::auth::check_auth(req, &config) {
         *res = resp;
         return;
     }
@@ -750,7 +750,7 @@ fn write_proppatch_output(props: &[(OwnedXmlName, String)], req_url: &str) -> Re
 pub async fn handle_mkcol(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let config = depot.obtain::<Arc<AppConfig>>().unwrap().clone();
 
-    if let Some(resp) = crate::middleware::auth::check_auth(req, &config) {
+    if let Some(resp) = crate::hoops::auth::check_auth(req, &config) {
         *res = resp;
         return;
     }
@@ -845,7 +845,7 @@ pub async fn handle_move(req: &mut Request, depot: &mut Depot, res: &mut Respons
 async fn handle_copy_move(req: &mut Request, depot: &mut Depot, res: &mut Response, is_move: bool) {
     let config = depot.obtain::<Arc<AppConfig>>().unwrap().clone();
 
-    if let Some(resp) = crate::middleware::auth::check_auth(req, &config) {
+    if let Some(resp) = crate::hoops::auth::check_auth(req, &config) {
         *res = resp;
         return;
     }

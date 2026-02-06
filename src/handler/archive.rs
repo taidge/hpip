@@ -87,7 +87,7 @@ pub async fn handle_post_archive(req: &mut Request, depot: &mut Depot, res: &mut
         return;
     }
 
-    if let Some(resp) = crate::middleware::auth::check_auth(req, &config) {
+    if let Some(resp) = crate::hoops::auth::check_auth(req, &config) {
         *res = resp;
         return;
     }

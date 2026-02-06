@@ -8,7 +8,7 @@ use crate::util::USER_AGENT;
 pub async fn handle_options(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let config = depot.obtain::<Arc<AppConfig>>().unwrap().clone();
 
-    if let Some(resp) = crate::middleware::auth::check_auth(req, &config) {
+    if let Some(resp) = crate::hoops::auth::check_auth(req, &config) {
         *res = resp;
         return;
     }

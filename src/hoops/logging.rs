@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 use crate::config::{log_msg, AppConfig};
 
-/// Request logging middleware (logs method and URL for every request).
-pub struct LoggingMiddleware;
+/// Request logging hoop (logs method and URL for every request).
+pub struct LoggingHoop;
 
 #[handler]
-impl LoggingMiddleware {
+impl LoggingHoop {
     async fn handle(
         &self,
         req: &mut Request,

@@ -2,7 +2,7 @@ mod config;
 mod encoding;
 mod error;
 mod handler;
-mod middleware;
+mod hoops;
 mod options;
 mod port;
 mod tls;
@@ -87,7 +87,7 @@ async fn result_main() -> Result<(), Error> {
         }
         print!(" with");
         match opts.tls_data.as_ref() {
-            Some(((ref id, _), _)) => print!(" TLS certificate from \"{}\"", id),
+            Some(((id, _), _)) => print!(" TLS certificate from \"{}\"", id),
             None => print!("out TLS"),
         }
         println!(
@@ -133,7 +133,7 @@ async fn result_main() -> Result<(), Error> {
     let bind_addr = format!("{}:{}", opts.bind_address, port);
 
     // Start the server
-    let acceptor = TcpListener::new(&bind_addr).bind().await;
+    let acceptor = TcpListener::new(bind_addr).bind().await;
 
     // Spawn cache pruning task if needed
     let config_prune = config.clone();
@@ -228,12 +228,12 @@ fn build_router(config: Arc<AppConfig>) -> Router {
 
     let mut router = Router::new()
         .hoop(inject)
-        .hoop(middleware::additional_headers::AdditionalHeadersMiddleware)
-        .hoop(middleware::logging::LoggingMiddleware);
+        .hoop(hoops::additional_headers::AdditionalHeadersHoop)
+        .hoop(hoops::logging::LoggingHoop);
 
     // Add DAV header for WebDAV mode
     if webdav_level >= options::WebDavLevel::MkColMoveOnly {
-        router = router.hoop(DavHeaderMiddleware);
+        router = router.hoop(DavHeaderHoop);
     }
 
     router = router
@@ -242,11 +242,11 @@ fn build_router(config: Arc<AppConfig>) -> Router {
     add_methods(router, webdav_level)
 }
 
-/// Middleware to add the DAV: 1 header to all responses
-struct DavHeaderMiddleware;
+/// Hoop to add the DAV: 1 header to all responses
+struct DavHeaderHoop;
 
 #[handler]
-impl DavHeaderMiddleware {
+impl DavHeaderHoop {
     async fn handle(
         &self,
         req: &mut Request,

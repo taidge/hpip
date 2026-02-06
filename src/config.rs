@@ -158,7 +158,7 @@ impl AppConfig {
     }
 
     pub fn create_temp_dir(&self, td: &Option<(String, PathBuf)>) {
-        if let Some((ref temp_name, ref temp_dir)) = td {
+        if let Some((temp_name, temp_dir)) = td {
             if !temp_dir.exists() {
                 if fs::create_dir_all(temp_dir).is_ok() {
                     log_msg(
