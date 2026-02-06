@@ -1,0 +1,38 @@
+name: ci-windows
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**.rs"
+      - "**/Cargo.toml"
+      - ".github/workflows/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "**.rs"
+      - "**/Cargo.toml"
+      - ".github/workflows/**"
+
+jobs:
+  test:
+    name: Test (stable) - x86_64-pc-windows-msvc
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Check build
+        run: cargo check --all-targets
+
+      - name: Check release build
+        run: cargo check --all-targets --release
+
+      - name: Run tests
+        timeout-minutes: 20
+        run: cargo test --no-fail-fast -- --nocapture

@@ -1,0 +1,48 @@
+[package]
+name = "hpip"
+description = "Host These Things Please - a modern async HTTP file server"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[dependencies]
+salvo = { version = "0.76", features = ["rustls"] }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blake3 = "1"
+flate2 = "1"
+chrono = "0.4"
+mime_guess = "2"
+mime = "0.3"
+percent-encoding = "2"
+xml-rs = "0.8"
+tar = "0.4"
+walkdir = "2"
+cidr = { version = "0.1", default-features = false }
+colored = "2"
+
+[dependencies.brotli]
+version = "8"
+
+[dependencies.zip]
+version = "5"
+default-features = false
+features = ["deflate-flate2"]
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+libc = "0.2"
+
+[build-dependencies]
+base64 = "0.22"
+
+[[bin]]
+name = "hpip"
+path = "src/main.rs"
+
+[profile.release]
+lto = true

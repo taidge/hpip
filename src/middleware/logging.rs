@@ -1,0 +1,34 @@
+use salvo::prelude::*;
+use std::sync::Arc;
+
+use crate::config::{log_msg, AppConfig};
+
+/// Request logging middleware (logs method and URL for every request).
+pub struct LoggingMiddleware;
+
+#[handler]
+impl LoggingMiddleware {
+    async fn handle(
+        &self,
+        req: &mut Request,
+        depot: &mut Depot,
+        res: &mut Response,
+        ctrl: &mut FlowCtrl,
+    ) {
+        let method = req.method().to_string();
+        let uri = req.uri().to_string();
+        let remote = req.remote_addr().to_string();
+
+        ctrl.call_next(req, depot, res).await;
+
+        if let Ok(config) = depot.obtain::<Arc<AppConfig>>() {
+            let status = res.status_code.unwrap_or(StatusCode::OK);
+            if config.log.0 {
+                log_msg(
+                    config.log,
+                    &format!("{} {} {} -> {}", remote, method, uri, status.as_u16()),
+                );
+            }
+        }
+    }
+}

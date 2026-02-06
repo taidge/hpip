@@ -1,0 +1,250 @@
+extern crate base64;
+
+use base64::display::Base64Display;
+use base64::engine::general_purpose::STANDARD_NO_PAD as BASE64_STANDARD_NO_PAD;
+use std::collections::{BTreeMap, BTreeSet};
+use std::env;
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader, Write};
+use std::path::Path;
+
+fn main() {
+    htmls();
+    extensions();
+}
+
+fn assets() -> Vec<(&'static str, String)> {
+    let mut assets = Vec::new();
+    {
+        println!("cargo:rerun-if-changed=Cargo.toml");
+        assets.push((
+            "generator",
+            format!(
+                "hpip {}",
+                BufReader::new(File::open("Cargo.toml").unwrap())
+                    .lines()
+                    .flatten()
+                    .find(|l| l.starts_with("version = "))
+                    .unwrap()["version = ".len()..]
+                    .trim_matches('"')
+            ),
+        ));
+    }
+    for (key, file) in [
+        ("favicon", "assets/favicon.png"),
+        ("dir_icon", "assets/icons/directory.gif"),
+        ("file_icon", "assets/icons/file.gif"),
+        ("file_binary_icon", "assets/icons/file_binary.gif"),
+        ("file_image_icon", "assets/icons/file_image.gif"),
+        ("file_text_icon", "assets/icons/file_text.gif"),
+        ("back_arrow_icon", "assets/icons/back_arrow.gif"),
+        ("new_dir_icon", "assets/icons/new_directory.gif"),
+        ("delete_file_icon", "assets/icons/delete_file.png"),
+        ("rename_icon", "assets/icons/rename.gif"),
+        ("confirm_icon", "assets/icons/confirm.gif"),
+    ] {
+        println!("cargo:rerun-if-changed={}", file);
+        assets.push((
+            key,
+            format!(
+                "data:image/{};base64,{}",
+                file.split('.').last().unwrap(),
+                Base64Display::new(&fs::read(file).unwrap()[..], &BASE64_STANDARD_NO_PAD)
+            ),
+        ));
+    }
+    let outd = env::var("OUT_DIR").unwrap();
+    fs::create_dir_all(format!("{}/{}", outd, "assets")).unwrap();
+    for (key, file) in [
+        ("manage", "assets/manage.js"),
+        ("manage_mobile", "assets/manage_mobile.js"),
+        ("manage_desktop", "assets/manage_desktop.js"),
+        ("upload", "assets/upload.js"),
+        ("upload_css", "assets/upload.css"),
+        ("adjust_tz", "assets/adjust_tz.js"),
+    ] {
+        println!("cargo:rerun-if-changed={}", file);
+        let data = fs::read_to_string(file).unwrap();
+        fs::write(
+            format!("{}/{}", outd, file),
+            data.lines()
+                .flat_map(|l| [l.trim(), "\n"])
+                .collect::<String>()
+                .as_bytes(),
+        )
+        .unwrap();
+        assets.push((key, data));
+    }
+    assets
+}
+
+fn htmls() {
+    let assets = assets();
+    for html in [
+        "error.html",
+        "directory_listing.html",
+        "directory_listing_mobile.html",
+    ] {
+        println!("cargo:rerun-if-changed=assets/{}", html);
+
+        let with_assets = assets
+            .iter()
+            .fold(
+                fs::read_to_string(format!("assets/{}", html)).unwrap(),
+                |d, (k, v)| d.replace(&format!("{{{}}}", k), v),
+            )
+            .lines()
+            .flat_map(|l| [l.trim(), "\n"])
+            .collect::<String>();
+
+        let mut arguments = BTreeMap::new();
+        for i in 0.. {
+            let len_pre = arguments.len();
+            arguments.extend(
+                with_assets
+                    .match_indices(&format!("{{{}}}", i))
+                    .map(|(start, s)| (start, (s.len(), i))),
+            );
+            if arguments.len() == len_pre {
+                break;
+            }
+        }
+
+        let mut data = Vec::new();
+        let mut argsused = BTreeMap::<u32, u8>::new();
+        let mut idx = 0;
+        for (start, (len, argi)) in arguments {
+            if !with_assets[idx..start].is_empty() {
+                data.push(Ok(&with_assets[idx..start]));
+            }
+            data.push(Err(argi));
+            *argsused.entry(argi).or_default() += 1;
+            idx = start + len;
+        }
+
+        let mut out =
+            File::create(Path::new(&env::var("OUT_DIR").unwrap()).join(format!("{}.rs", html)))
+                .unwrap();
+        write!(&mut out, "pub fn {}<", html.replace('.', "_")).unwrap();
+        for (arg, nused) in &argsused {
+            if *nused == 1 {
+                write!(&mut out, "T{}: HtmlResponseElement, ", arg).unwrap();
+            } else {
+                write!(&mut out, "T{}: HtmlResponseElement + Copy, ", arg).unwrap();
+            }
+        }
+        write!(&mut out, ">(").unwrap();
+        for (arg, _) in &argsused {
+            write!(&mut out, "a{}: T{}, ", arg, arg).unwrap();
+        }
+        let raw_bytes = data.iter().fold(0, |sz, dt| match dt {
+            Ok(s) => sz + s.len(),
+            Err(_) => sz,
+        });
+        writeln!(
+            &mut out,
+            r#") -> String {{
+    let mut ret = Vec::with_capacity({});  // {}"#,
+            if html == "error.html" {
+                raw_bytes.next_power_of_two()
+            } else {
+                32 * 1024
+            },
+            raw_bytes
+        )
+        .unwrap();
+        for dt in data {
+            match dt {
+                Ok(s) => writeln!(&mut out, "    ret.extend({:?}.as_bytes());", s).unwrap(),
+                Err(i) => writeln!(&mut out, "    a{}.commit(&mut ret);", i).unwrap(),
+            }
+        }
+        writeln!(
+            &mut out,
+            "    ret.extend({:?}.as_bytes());",
+            &with_assets[idx..]
+        )
+        .unwrap();
+
+        writeln!(
+            &mut out,
+            r#"
+    ret.shrink_to_fit();
+    unsafe {{ String::from_utf8_unchecked(ret) }}
+}}"#
+        )
+        .unwrap();
+    }
+
+    for file in ["assets/directory_listing_achive_inputs.html"] {
+        println!("cargo:rerun-if-changed={}", file);
+        fs::write(
+            Path::new(&env::var("OUT_DIR").unwrap()).join(file),
+            fs::read_to_string(file).unwrap().trim().as_bytes(),
+        )
+        .unwrap();
+    }
+}
+
+fn extensions() {
+    println!("cargo:rerun-if-changed={}", "assets/encoding_blacklist");
+    let mut out =
+        File::create(Path::new(&env::var("OUT_DIR").unwrap()).join("extensions.rs")).unwrap();
+
+    let raw = fs::read_to_string("assets/encoding_blacklist").unwrap();
+    let mut exts = BTreeMap::new();
+    for ext in raw
+        .split('\n')
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !s.starts_with('#'))
+    {
+        exts.entry(ext.len())
+            .or_insert(BTreeSet::new())
+            .insert(ext);
+    }
+    writeln!(
+        out,
+        "pub fn extension_is_blacklisted(ext: &std::ffi::OsStr) -> bool {{"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "#[cfg(not(target_os = \"windows\"))] use std::os::unix::ffi::OsStrExt;"
+    )
+    .unwrap();
+
+    write!(out, "if !matches!(ext.len(),").unwrap();
+    for (i, len) in exts.keys().enumerate() {
+        write!(out, " {} {}", if i == 0 { "" } else { "|" }, len).unwrap();
+    }
+    writeln!(out, ") {{ return false; }}").unwrap();
+
+    let maxlen = exts.keys().max().unwrap();
+    writeln!(
+        out,
+        r#"
+let mut buf = [0u8; {}];
+#[cfg(not(target_os = "windows"))]
+let bytes = ext.as_bytes();
+#[cfg(target_os = "windows")]
+let bytes = ext.as_encoded_bytes();
+for (i, b) in bytes.iter().enumerate() {{
+if !b.is_ascii_alphanumeric() {{
+    return false;
+}}
+buf[i] = b.to_ascii_lowercase();
+}}
+let lcase = &buf[0..ext.len()];
+"#,
+        maxlen
+    )
+    .unwrap();
+
+    write!(out, "matches!(lcase,").unwrap();
+    for (i, ext) in exts.values().flatten().enumerate() {
+        write!(out, " {} b{:?}", if i == 0 { "" } else { "|" }, ext).unwrap();
+    }
+    writeln!(out, ")").unwrap();
+
+    writeln!(out, "}}").unwrap();
+}
