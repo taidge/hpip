@@ -3,6 +3,9 @@ name = "hpip"
 description = "Host These Things Please - a modern async HTTP file server"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+repository = "https://github.com/taidge/hpip"
+homepage = "https://github.com/taidge/hpip"
 build = "build.rs"
 
 [dependencies]
